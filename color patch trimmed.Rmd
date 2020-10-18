@@ -1,0 +1,1013 @@
+---
+title: "color patch trimmed"
+author: "Andrew O. Rubio"
+date: "9/10/2020"
+output: html_document
+---
+
+```{r}
+library(tximport)
+library(DESeq2)
+library(dplyr)
+library(foreach)
+library(data.table)
+library(splines)
+library(ggthemes)
+library(scales)
+library(gridExtra)
+library(tidyr)
+library(pheatmap)
+library(RColorBrewer)
+library(ggplot2)
+library("BiocParallel")
+register(SnowParam(8))
+library(apeglm)
+library(tidyverse)
+library(topGO)
+library(GO.db)
+library(tidyverse)
+library(SummarizedExperiment)
+library(pcaExplorer)
+```
+
+
+Some functions for this analysis.
+
+```{r}
+# this function pulls out particular a priori genes of interest into a new data frame
+aprioris <- function(df, annos){
+  df.aprioris <- data.frame()
+  for (i in 1:length(colors$gene_name)){
+    searchterm <- paste0("\\b", colors$gene_name[i], "\\b")
+    searchterm <- tolower(searchterm)
+    tmp <- df %>% filter(str_detect(Gene, searchterm))
+    df.aprioris <- rbind(df.aprioris, tmp)
+}
+   return(df.aprioris)
+}
+
+# this function extracts all genes below a specified alpha value, prints the number of DE genes to screen, and saves a spreadsheet to file
+siggies <- function(df, alpha, csv){
+  sigs <- df %>% filter(padj < alpha)
+  print(paste0("Number of significant genes: ", length(sigs$padj)))
+  write.csv(sigs, csv, row.names = FALSE)
+  return(sigs)
+}
+
+
+# significant gene wrapper function
+SigGeneWrapper <- function(model_output, alpha, comparison){
+  print(paste0("Running ", comparison, " with alpha = ", alpha))
+  df <- setDT(as.data.frame(model_output), keep.rownames = "Gene")
+  # add annotation data
+  #df1 <- dplyr::left_join(df, annos, by = "transcript") 
+  # get significant genes
+  print("Overall significant genes")
+  sigs <- siggies(df, alpha, paste0("results/results/", comparison, "_genes.csv"))
+  # add annotation data
+  colordf <- aprioris(df, annos)
+  #get significant color genes
+  print("Significant color genes")
+  color.sigs <- siggies(colordf, alpha, paste0("results/results/", comparison, "_colorgenes.csv"))
+}
+
+```
+
+#Data import
+
+```{r}
+sessionInfo()
+```
+
+#Data import
+
+create sample spreadsheet.
+
+```{r}
+###### list all samples from expression data ####
+# get the directory/path for each sample in this study
+base_dir <- getwd()
+
+filenames <- list.files(path = "gene counts/", full.names = F, recursive = F)
+
+files <- file.path(base_dir, "gene counts/", filenames) # files = directory + salmon directory + sample name + quantifictaion file name
+
+names(files) <- "~/Google Drive/Projects/color_patch_trimmed/gene counts/"
+all(file.exists(files)) # do these all actually exist?
+list(files)
+
+#### make sample spreadsheet####
+
+samples <- as.data.frame(filenames)
+
+# get sample
+samples$sample <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "Black", replacement = "") %>% gsub(pattern = "Yellow", replacement = "") %>% gsub(pattern = "Varadero", replacement = "") %>% gsub(pattern = "Sauce", replacement = "")  %>% gsub(pattern = "Red", replacement = "")
+samples$sample
+
+# get tussue
+samples$tissue <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "[0-9]", replacement = "") %>% gsub(pattern = "Sauce", replacement = "") %>% gsub(pattern = "Varadero", replacement = "") %>% gsub(pattern = "Yellow", replacement = "Orange")
+samples$tissue
+
+# get morph
+samples$morph <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "Black", replacement = "") %>% gsub(pattern = "Yellow", replacement = "") %>% gsub(pattern = "[0-9]", replacement = "") %>% gsub(pattern = "Red", replacement = "") 
+samples$morph
+
+# save as spreadsheet
+dir.create("~/Google Drive/Projects/color_patch_trimmed/results")
+#write.csv(samples, "~/Google Drive/Color patch/results/samplespreadsheet.csv", row.names = F)
+
+deseqsamples <- samples [,-1]
+
+list(deseqsamples)
+
+write.csv(deseqsamples, "~/Google Drive/Projects/color_patch_trimmed/results/samplespreadsheet.csv", row.names = F)
+```
+
+# Import expression data from.
+```{r}
+annos <- fread("Ranitomeya_imitator.imitator.1.3.6.annotations.genesymbol.tsv", header = FALSE)
+colnames(annos) <- c("transcript", "Gene")
+annos$Gene <- tolower(annos$Gene)
+
+# rname columns from annos file
+# import data
+countdata <- data.frame(annos$transcript)
+colnames(countdata) <- "transcript"
+for (counts in (1:length(filenames))) {
+  # import data for that sample
+  toimport <- filenames[counts]
+tmpdata <- read.table(paste0("bvsc gene counts/", toimport), header = FALSE, sep = "\t")
+  # sample id
+  samplename <- toimport %>% gsub(pattern = ".gene.counts", replacement = "")
+  colnames(tmpdata) <- c("transcript", samplename)
+  countdata <- dplyr::left_join(countdata, tmpdata, by = "transcript")
+}
+
+
+dim(countdata)
+countdata <- data.frame(countdata, row.names = 1)
+head(countdata)
+head(annos)
+```
+
+# Import a priori candidate color gene
+```{r}
+colors <- read.csv("new_color_genes.csv", header = TRUE)
+colnames(colors) <- "gene_name" 
+colors$gene_name <- tolower(colors$gene_name)
+head(colors)
+```
+
+# Quick data control. Change and "NA" values to "0". Also remove any row with total expression <50 (or 1 count/every 3rd sample).
+```{r}
+# change all NA to 0
+print(paste("Number of NA after import:", sum(is.na(countdata))))
+countdata[is.na(countdata)] <-  0
+print(paste("Number of NA after NA removal:", sum(is.na(countdata))))
+
+# remove any row with total expression < 10
+print(paste("Number of rows (transcripts) after import:", nrow(countdata)))
+keep <- rowSums(countdata) >= 50
+countdata <- countdata[keep,]
+print(paste("Number of rows (transcripts) after filter:", nrow(countdata)))
+
+head(countdata)
+countdata
+write.csv(countdata, "~/Google Drive/Projects/color_patch_trimmed/results/count_data.csv", row.names = F)
+```
+
+```{r}
+# make rownames column 1
+countdata <- setDT(countdata, keep.rownames = "transcript")[]
+
+# add gene symbol
+countdata2 <- dplyr::left_join(annos, countdata, by = "transcript")
+
+# change all NA to 0
+print(paste("Number of NA after import:", sum(is.na(countdata2))))
+countdata2[is.na(countdata2)] <-  0
+print(paste("Number of NA after NA removal:", sum(is.na(countdata2))))
+
+
+# combine all counts that map to the same gene
+countdata3 <- aggregate(countdata2[, 3:18], list(countdata2$Gene), sum)
+countdata3[is.na(countdata3)] <-  0
+colnames(countdata3)[1] <- "Gene"
+countdata <- countdata3
+
+countdata <- data.frame(countdata, row.names = 1)
+
+#newcountdata<- countdata[, c("Sauce_Black_15", "Sauce_Black_29")]
+
+# save gene-level count data
+write.table(countdata, "results/gene.level.count.data.tsv", row.names = TRUE, sep = "\t")
+
+
+```
+
+
+
+```{r}
+dds <- DESeqDataSetFromMatrix (countData = countdata,
+                                       colData = deseqsamples,
+                                       design = ~ tissue + morph)
+vsd <- vst(dds)
+
+
+
+```
+
+# create a PCA
+```{r}
+# get PC1 and PC2 data
+
+pcaData <- plotPCA(vsd, intgroup = c("tissue", "morph"), returnData = TRUE)
+pcaData
+summary(pcaData)
+
+plotPCA(vsd, intgroup=c("morph", "tissue"))
+
+# get percent variation
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+# pca code
+ggplot(pcaData, aes(x = PC1, y = PC2, color = tissue, shape = morph ))+
+  stat_ellipse(aes(group = morph), type = "t", level = .95, size = .55, show.legend = FALSE) + geom_point(size = 3.5, show.legend = TRUE) + 
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed() + theme_bw() + scale_shape_manual(values = c(18:15)) + scale_color_manual(values=c ("BLACK", "ORANGE", "RED")) + labs(color = "skin ccolor patch")  +  labs(shape = "color morph")  +  ggsave("results/figures/pca.png") 
+
+#pcaExplorer(dds=dds)
+```
+
+______________________________________________
+#Only Sauce morph
+```{r}
+
+
+sauce.skincount <- dplyr::select(countdata, contains("Sauce"))
+sauce.skinmorph <- deseqsamples %>% filter(morph == "Sauce")
+
+
+write.table(sauce.skinmorph, "~/Google Drive/Projects/color_patch_trimmed/Sauce orange vs black/sauce_deseqsamples.tsv", row.names = TRUE, sep = "\t")
+
+# create DESeq dataset
+dds.sauce.skin <- DESeqDataSetFromMatrix (countData = sauce.skincount, 
+                                       colData = sauce.skinmorph,
+                                       design = ~ tissue)
+
+as.data.frame( colData(dds.sauce.skin))
+dds.sauce.skin
+#run Wald test
+dds.sauce.yellowVSblack <- DESeq(dds.sauce.skin, parallel=TRUE, BPPARAM=SnowParam(8))
+res.sauce.yellowVSblack <- results(dds.sauce.yellowVSblack, parallel=TRUE, BPPARAM=SnowParam(8))
+res.sauce.yellowVSblack$transcript <- mcols(res.sauce.yellowVSblack)$transcript
+
+res.sauce.yellowVSblack
+
+# how many are "significant"?
+table(res.sauce.yellowVSblack[,"padj"] < 0.05)
+
+#color genes 
+SigGeneWrapper(res.sauce.yellowVSblack, 0.05, "res.sauce.yellowVSblack")
+
+#SigGeneWrapper(res.sauce.yellowVSblack, 0.0125, "0.01.res.sauce.yellowVSblack")
+
+
+
+```
+
+
+#heatmap:Top 100 genes
+```{r}
+
+vsd.sauce.yellowVSblack <- vst(dds.sauce.skin)
+
+mat.sauce.yellowVSblack <- assay(vsd.sauce.yellowVSblack) [ head(order(res.sauce.yellowVSblack$padj),100),]
+mat.sauce.yellowVSblack <- mat.sauce.yellowVSblack - rowMeans(mat.sauce.yellowVSblack)
+df.sauce.yellowVSblack <- as.data.frame(colData(vsd.sauce.yellowVSblack)[,c("tissue","morph")])
+
+pheatmap(mat.sauce.yellowVSblack, annotation_col=df.sauce.yellowVSblack, main = "Sauce morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), cutree_cols = 2, cluster_rows = F,cluster_cols = F, annotation_legend = FALSE, angle_col = "45")
+
+#, labels_row = c("", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""))
+
+pheatmap(mat.sauce.yellowVSblack, annotation_col=df.sauce.yellowVSblack, main = "Sauce morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), cutree_cols = 2, cluster_rows = T,cluster_cols = F, annotation_legend = FALSE, angle_col = "45", labels_row = c("", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", ""), scale = "row",labels_col = c("Black", "Black","Black", "Black", "Orange","Orange","Orange","Orange"), filename = "results/figures/sauce_morph.png")
+
+```
+
+#heatmap of color genes
+```{r}
+sauce.colorgenes.countdata<- countdata[c("adsl",
+"ak1","atic","dct","erbb3","gas1","gmps","gpnmb","gpr143","kcnj13","mab21l2","mc1r","mlana","mlph","mreg","oca2","paics","pax3","pax3-a","pmel","pnp","ppat","pts","rab27a","rbp1","rpl24","rps20","scarb2","slc24a5","slc45a2","sox18","trpm1","tyrp1","xdh","dgat2","pax7","ttc39b"), 1:8]
+```
+
+```{r}
+
+sauce.significant.color.dds <- DESeqDataSetFromMatrix (countData = sauce.colorgenes.countdata,
+                                       colData = sauce.skinmorph, 
+                                       design = ~ tissue)
+
+sauce.significant.color.vsd <- varianceStabilizingTransformation(sauce.significant.color.dds, blind=FALSE)
+
+sauce.significant.color.dds <- DESeq(sauce.significant.color.dds)
+
+# get PC1 and PC2 data
+pcaData <- plotPCA(sauce.significant.color.vsd, intgroup = c("tissue", "morph"), returnData = TRUE)
+pcaData
+
+summary(pcaData)
+array(pcaData)
+
+plotPCA(sauce.significant.color.vsd, intgroup=c("morph", "tissue"))
+
+# get percent variation
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+
+# pca code
+ggplot(pcaData, aes(x = PC1, y = PC2, color = tissue, shape = morph ))+
+  stat_ellipse(aes(group = tissue), type = "t", level = 0.95, size = .75, show.legend = FALSE) + geom_point(size = 1.5, show.legend = TRUE) + 
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed() + theme_bw() 
+
+```
+
+```{r}
+sauce.significant.color.res <- results(sauce.significant.color.dds)
+sauce.significant.color.mat<- assay(sauce.significant.color.vsd) [ head(order(sauce.significant.color.res$padj),100),]
+sauce.significant.color.mat <- sauce.significant.color.mat - rowMeans(sauce.significant.color.mat)
+sauce.significant.color.df <- as.data.frame(colData(sauce.significant.color.vsd)[,c("tissue","morph")])
+
+pheatmap(sauce.significant.color.mat, annotation_col=sauce.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = F)
+#, filename = "results/figures/sauce/sauce_orangevsblackbasic1.pdf")
+
+pheatmap(sauce.significant.color.mat, annotation_col=sauce.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = T)
+#, filename = "results/figures/sauce/sauce_orangevsblackbasic.2.pdf")
+
+pheatmap(sauce.significant.color.mat, annotation_col=sauce.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row")
+#, filename = "results/figures/sauce/sauce_orangevsblackrow.pdf")
+
+pheatmap(sauce.significant.color.mat, annotation_col=sauce.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",main = "Sauce morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45")
+#, filename = "results/figures/sauce/sauce_orangevsblackrow noname.pdf")
+
+
+pheatmap(sauce.significant.color.mat, annotation_col=sauce.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("Black","Black","Black","Black","Orange","Orange","Orange","Orange"),main = "Sauce morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45",annotation_legend = F)
+
+pheatmap(sauce.significant.color.mat, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","Sauce: Black","","","Sauce: Orange",""),main = "Sauce morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",gaps_col = c(4),annotation_legend = F, filename = "results/figures/sauce/sauce_blackvsorange.png")
+
+
+```
+
+#sauce:malenin related renes
+
+```{r}
+sauce.melanin.countdata<- countdata[c("mc1r","tyrp1","slc45a2","slc24a5","rab27a","pmel","pax7","pax3","oca2","mreg","mlph","mlana","kcnj13","gpr143","gpnmb", "erbb3", "dct", "trpm1"), 1:8]
+
+
+melanin_sauce.significant.color.dds <- DESeqDataSetFromMatrix (countData = sauce.melanin.countdata,
+                                       colData = sauce.skinmorph, 
+                                       design = ~ tissue)
+
+melanin_sauce.significant.color.vsd <- varianceStabilizingTransformation(melanin_sauce.significant.color.dds, blind=FALSE)
+
+melanin_sauce.significant.color.dds <- DESeq(melanin_sauce.significant.color.dds)
+
+melanin_sauce.significant.color.res <- results(melanin_sauce.significant.color.dds)
+melanin_sauce.significant.color.mat<- assay(melanin_sauce.significant.color.vsd) [ head(order(melanin_sauce.significant.color.res$padj),100),]
+melanin_sauce.significant.color.mat <- melanin_sauce.significant.color.mat - rowMeans(melanin_sauce.significant.color.mat)
+melanin_sauce.significant.color.df <- as.data.frame(colData(melanin_sauce.significant.color.vsd)[,c("tissue","morph")])
+
+pheatmap(melanin_sauce.significant.color.mat, annotation_col=melanin_sauce.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = F)
+#, filename = "results/figures/sauce/melanin_sauce_orangevsblackbasic1.pdf")
+
+pheatmap(melanin_sauce.significant.color.mat, annotation_col=melanin_sauce.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = T)
+#, filename = "results/figures/sauce/melanin_sauce_orangevsblackbasic.2.pdf")
+
+pheatmap(melanin_sauce.significant.color.mat, annotation_col=melanin_sauce.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row")
+         #,filename = "results/figures/sauce/melanin_sauce_orangevsblackrow.pdf")
+
+pheatmap(melanin_sauce.significant.color.mat, annotation_col=melanin_sauce.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",main = "Sauce morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45")
+#, filename = "results/figures/sauce/melanin_sauce_orangevsblackrow noname.pdf")
+
+pheatmap(melanin_sauce.significant.color.mat, annotation_col=melanin_sauce.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("Black","Black","Black","Black","Orange","Orange","Orange","Orange"),main = "Melanin genes", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45",annotation_legend = F)
+
+pheatmap(melanin_sauce.significant.color.mat, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","Sauce: Black","","","Sauce: Orange",""),main = "Melanin/melanosome synthesis", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",annotation_legend = F, gaps_col = c(4), fontsize= 15, filename = "results/figures/sauce/publication/melanin_sauce_blackvsorange.png")
+
+
+```
+
+#iridophore and pteridine
+```{r}
+
+sauce.iridophoresandguanine.countdata<- countdata[c("adsl","ak1", "atic", "gas1","gmps","paics","pnp","ppat", "pts", "xdh"), 1:8]
+
+
+iridophoresandguanine_sauce.significant.color.dds <- DESeqDataSetFromMatrix (countData = sauce.iridophoresandguanine.countdata,
+                                       colData = sauce.skinmorph, 
+                                       design = ~ tissue)
+
+iridophoresandguanine_sauce.significant.color.vsd <- varianceStabilizingTransformation(iridophoresandguanine_sauce.significant.color.dds, blind=FALSE)
+
+iridophoresandguanine_sauce.significant.color.dds <- DESeq(iridophoresandguanine_sauce.significant.color.dds)
+
+iridophoresandguanine_sauce.significant.color.res <- results(iridophoresandguanine_sauce.significant.color.dds)
+iridophoresandguanine_sauce.significant.color.mat<- assay(iridophoresandguanine_sauce.significant.color.vsd) [ head(order(iridophoresandguanine_sauce.significant.color.res$padj),100),]
+iridophoresandguanine_sauce.significant.color.mat <- iridophoresandguanine_sauce.significant.color.mat - rowMeans(iridophoresandguanine_sauce.significant.color.mat)
+iridophoresandguanine_sauce.significant.color.df <- as.data.frame(colData(iridophoresandguanine_sauce.significant.color.vsd)[,c("tissue","morph")])
+
+pheatmap(iridophoresandguanine_sauce.significant.color.mat, annotation_col=iridophoresandguanine_sauce.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = F, filename = "results/figures/sauce/iridophoresandguanine_sauce_blackbasicvsblack1.pdf")
+
+pheatmap(iridophoresandguanine_sauce.significant.color.mat, annotation_col=iridophoresandguanine_sauce.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = T, filename = "results/figures/sauce/iridophoresandguanine_sauce_blackvsorangebasic.2.pdf")
+
+pheatmap(iridophoresandguanine_sauce.significant.color.mat, annotation_col=iridophoresandguanine_sauce.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",filename = "results/figures/sauce/iridophoresandguanine_sauce_blackvsorangerow.pdf")
+
+pheatmap(iridophoresandguanine_sauce.significant.color.mat, annotation_col=iridophoresandguanine_sauce.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",main = "Sauce morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45", filename = "results/figures/sauce/iridophoresandguanine_sauce_blackvsorangerow noname.pdf")
+
+pheatmap(iridophoresandguanine_sauce.significant.color.mat, annotation_col=iridophoresandguanine_sauce.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("Black","Black","Black","Black","Orange","Orange","Orange","Orange"),main = "iridophores and pteridine", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45",annotation_legend = F)
+
+pheatmap(iridophoresandguanine_sauce.significant.color.mat, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","Sauce: Black","","","Sauce: Orange",""),main = "Iridophore and pteridine", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",annotation_legend = F, gaps_col = c(4),fontsize= 15, filename = "results/figures/sauce/publication/iridophoresandguanine_sauce_blackvsorange.png")
+
+```
+
+
+```{r}
+
+sauce.carotenoid.countdata<- countdata[c("dgat2","mab21l2", "rbp1", "scarb2", "ttc39b"), 1:8]
+
+
+carotenoid_sauce.significant.color.dds <- DESeqDataSetFromMatrix (countData = sauce.carotenoid.countdata,
+                                       colData = sauce.skinmorph, 
+                                       design = ~ tissue)
+
+carotenoid_sauce.significant.color.vsd <- varianceStabilizingTransformation(carotenoid_sauce.significant.color.dds, blind=FALSE)
+
+carotenoid_sauce.significant.color.dds <- DESeq(carotenoid_sauce.significant.color.dds)
+
+carotenoid_sauce.significant.color.res <- results(carotenoid_sauce.significant.color.dds)
+carotenoid_sauce.significant.color.mat<- assay(carotenoid_sauce.significant.color.vsd) [ head(order(carotenoid_sauce.significant.color.res$padj),100),]
+carotenoid_sauce.significant.color.mat <- carotenoid_sauce.significant.color.mat - rowMeans(carotenoid_sauce.significant.color.mat)
+carotenoid_sauce.significant.color.df <- as.data.frame(colData(carotenoid_sauce.significant.color.vsd)[,c("tissue","morph")])
+
+pheatmap(carotenoid_sauce.significant.color.mat, annotation_col=carotenoid_sauce.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = F, filename = "results/figures/sauce/carotenoid_sauce_blackvsorangebasic1.pdf")
+
+pheatmap(carotenoid_sauce.significant.color.mat, annotation_col=carotenoid_sauce.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = T, filename = "results/figures/sauce/carotenoid_sauce_blackvsorangebasic.2.pdf")
+
+pheatmap(carotenoid_sauce.significant.color.mat, annotation_col=carotenoid_sauce.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",filename = "results/figures/sauce/carotenoid_sauce_blackvsorangerow.pdf")
+
+pheatmap(carotenoid_sauce.significant.color.mat, annotation_col=carotenoid_sauce.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",main = "Sauce morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45", filename = "results/figures/sauce/carotenoid_sauce_blackvsorangerow noname.pdf")
+
+pheatmap(carotenoid_sauce.significant.color.mat, annotation_col=carotenoid_sauce.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("Black","Black","Black","Black","Orange","Orange","Orange","Orange"),main = "Carotenoid metabolism", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45",annotation_legend = F)
+
+pheatmap(carotenoid_sauce.significant.color.mat, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","Sauce: Black","","","Sauce: Orange",""),main = "Carotenoid metabolism", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",annotation_legend = F, fontsize= 15,gaps_col = c(4), filename = "results/figures/sauce/publication/carotenoid_sauce_blackvsorange.png")
+
+```
+
+
+________________________________
+#Only Varadero morph
+```{r}
+
+varadero.skincount <- dplyr::select(countdata, contains("Varadero"))
+varadero.skinmorph <- deseqsamples %>% filter(morph == "Varadero")
+
+
+# create DESeq dataset
+dds.varadero.skin <- DESeqDataSetFromMatrix (countData = varadero.skincount, 
+                                       colData = varadero.skinmorph,
+                                       design = ~ tissue)
+
+as.data.frame( colData(dds.varadero.skin) )
+
+#run Wald test
+dds.varadero.redVSblack <- DESeq(dds.varadero.skin, parallel=TRUE, BPPARAM=SnowParam(8))
+res.varadero.redVSblack <- results(dds.varadero.redVSblack, parallel=TRUE, BPPARAM=SnowParam(8))
+res.varadero.redVSblack$transcript <- mcols(res.varadero.redVSblack)$transcript
+
+res.varadero.redVSblack
+
+# how many are "significant"?
+table(res.varadero.redVSblack[,"padj"] < 0.05)
+
+#color genes 
+SigGeneWrapper(res.varadero.redVSblack, 0.05, "res.varadero.redVSblack")
+
+#SigGeneWrapper(res.varadero.redVSblack, 0.05, "0.01.res.varadero.redVSblack")
+```
+
+
+#pheatmap
+```{r}
+vsd.varadero.redVSblack <- vst(dds.varadero.redVSblack)
+
+mat.varadero.redVSblack <- assay(vsd.varadero.redVSblack) [ head(order(res.varadero.redVSblack$padj),100),]
+mat.varadero.redVSblack <- mat.varadero.redVSblack - rowMeans(mat.varadero.redVSblack)
+df.varadero.redVSblack <- as.data.frame(colData(vsd.varadero.redVSblack)[,c("tissue","morph")])
+
+pheatmap(mat.varadero.redVSblack, annotation_col=df.varadero.redVSblack, main = "Varadero morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), cutree_cols = 2, cluster_rows = T,cluster_cols = F, annotation_legend = FALSE, angle_col = "45", labels_row = c("", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", ""))
+
+pheatmap(mat.varadero.redVSblack, annotation_col=df.varadero.redVSblack, main = "Varadero morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), cutree_cols = 2, cluster_rows = T,cluster_cols = F, annotation_legend = FALSE, angle_col = "45", labels_row = c("", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", "","", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 
+    "", ""),labels_col = c("Black","Black", "Black","Black", "Red", "Red","Red","Red"), scale = "row", filename = "results/figures/varadero_morph.png")
+```
+
+
+#heatmap of color genes
+```{r}
+varadero.colorgenes.countdata<- countdata[c("xdh", "tyrp1", "ttc39b", "slc45a2", "slc24a5", "rbp2", "rbp1", "rab27a","pts", "pnp", "pmel", "pax7", "pax6", "pax3-a", "pax3", "oca2", "mitf", "mc1r", "mab21l2", "kcnj13", "gpr143", "gpnmb", "gch1", "dgat2", "dct"), 9:16]
+
+varadero.significant.color.dds <- DESeqDataSetFromMatrix (countData = varadero.colorgenes.countdata,
+                                       colData = varadero.skinmorph, 
+                                       design = ~ tissue)
+
+varadero.significant.color.vsd <- varianceStabilizingTransformation(varadero.significant.color.dds, blind=FALSE)
+
+varadero.significant.color.dds <- DESeq(varadero.significant.color.dds)
+
+# get PC1 and PC2 data
+pcaData <- plotPCA(varadero.significant.color.vsd, intgroup = c("tissue", "morph"), returnData = TRUE)
+pcaData
+
+summary(pcaData)
+array(pcaData)
+
+plotPCA(varadero.significant.color.vsd, intgroup=c("morph", "tissue"))
+
+# get percent variation
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+
+# pca code
+ggplot(pcaData, aes(x = PC1, y = PC2, color = tissue, shape = morph ))+
+  stat_ellipse(aes(group = tissue), type = "t", level = 0.95, size = .75, show.legend = FALSE) + geom_point(size = 1.5, show.legend = TRUE) + 
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed() + theme_bw() 
+
+```
+
+```{r}
+varadero.significant.color.res <- results(varadero.significant.color.dds)
+varadero.significant.color.mat<- assay(varadero.significant.color.vsd) [ head(order(varadero.significant.color.res$padj),100),]
+varadero.significant.color.mat <- varadero.significant.color.mat - rowMeans(varadero.significant.color.mat)
+varadero.significant.color.df <- as.data.frame(colData(varadero.significant.color.vsd)[,c("tissue","morph")])
+
+pheatmap(varadero.significant.color.mat, annotation_col=varadero.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = F)
+#, filename = "results/figures/varadero/varadero_blackvsredbasic1.pdf")
+
+pheatmap(varadero.significant.color.mat, annotation_col=varadero.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = T)
+#, filename = "results/figures/varadero/varadero_blackvsredbasic.2.pdf")
+
+pheatmap(varadero.significant.color.mat, annotation_col=varadero.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row")
+#, filename = "results/figures/varadero/varadero_blackvsredrow.pdf")
+
+pheatmap(varadero.significant.color.mat, annotation_col=varadero.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",main = "varadero morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45")
+#, filename = "results/figures/varadero/varadero_blackvsredrow noname.pdf")
+
+
+pheatmap(varadero.significant.color.mat, annotation_col=varadero.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("Black","Black","Black","Black","red","red","red","red"),main = "varadero morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45",annotation_legend = F)
+
+pheatmap(varadero.significant.color.mat, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","Varadero: Black","","","varadero: Red",""),main = "Varadero morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",gaps_col = c(4),annotation_legend = F, filename = "results/figures/varadero/varadero_blackvsred.png")
+
+
+```
+
+#sauce:malenin related renes
+
+```{r}
+varadero.melanin.countdata<- countdata[c("dct", "gpnmb", "gpr143", "kcnj13", "mc1r", "mitf", "oca2", "pax3", "pax7", "pmel", "rab27a", "slc24a5", "slc45a2", "tyrp1"), 9:16]
+
+
+melanin_varadero.significant.color.dds <- DESeqDataSetFromMatrix (countData = varadero.melanin.countdata,
+                                       colData = varadero.skinmorph, 
+                                       design = ~ tissue)
+
+melanin_varadero.significant.color.vsd <- varianceStabilizingTransformation(melanin_varadero.significant.color.dds, blind=FALSE)
+
+melanin_varadero.significant.color.dds <- DESeq(melanin_varadero.significant.color.dds)
+
+melanin_varadero.significant.color.res <- results(melanin_varadero.significant.color.dds)
+melanin_varadero.significant.color.mat<- assay(melanin_varadero.significant.color.vsd) [ head(order(melanin_varadero.significant.color.res$padj),100),]
+melanin_varadero.significant.color.mat <- melanin_varadero.significant.color.mat - rowMeans(melanin_varadero.significant.color.mat)
+melanin_varadero.significant.color.df <- as.data.frame(colData(melanin_varadero.significant.color.vsd)[,c("tissue","morph")])
+
+pheatmap(melanin_varadero.significant.color.mat, annotation_col=melanin_varadero.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = F)
+#, filename = "results/figures/varadero/melanin_varadero_blackvsredbasic1.pdf")
+
+pheatmap(melanin_varadero.significant.color.mat, annotation_col=melanin_varadero.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = T)
+#, filename = "results/figures/varadero/melanin_varadero_blackvsredbasic.2.pdf")
+
+pheatmap(melanin_varadero.significant.color.mat, annotation_col=melanin_varadero.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row")
+         #,filename = "results/figures/varadero/melanin_varadero_blackvsredrow.pdf")
+
+pheatmap(melanin_varadero.significant.color.mat, annotation_col=melanin_varadero.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",main = "Varadero morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45")
+#, filename = "results/figures/varadero/melanin_varadero_blackvsredrow noname.pdf")
+
+pheatmap(melanin_varadero.significant.color.mat, annotation_col=melanin_varadero.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("Black","Black","Black","Black","red","red","red","red"),main = "Melanin/melanosome synthesis", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45",annotation_legend = F)
+
+pheatmap(melanin_varadero.significant.color.mat, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","Varadero: Black","","","Varadero: Red",""),main = "Melanin/melanosome synthesis", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",annotation_legend = F, gaps_col = c(4), fontsize= 15, filename = "results/figures/varadero/publication/melanin_varadero_blackvsred.png")
+
+```
+
+
+```{r}
+varadero.iridophoresandguanine.countdata<- countdata[c("gch1", "xdh", "pnp", "pts" ), 9:16]
+
+
+iridophoresandguanine_varadero.significant.color.dds <- DESeqDataSetFromMatrix (countData = varadero.iridophoresandguanine.countdata,
+                                       colData = varadero.skinmorph, 
+                                       design = ~ tissue)
+
+iridophoresandguanine_varadero.significant.color.vsd <- varianceStabilizingTransformation(iridophoresandguanine_varadero.significant.color.dds, blind=FALSE)
+
+iridophoresandguanine_varadero.significant.color.dds <- DESeq(iridophoresandguanine_varadero.significant.color.dds)
+
+iridophoresandguanine_varadero.significant.color.res <- results(iridophoresandguanine_varadero.significant.color.dds)
+iridophoresandguanine_varadero.significant.color.mat<- assay(iridophoresandguanine_varadero.significant.color.vsd) [ head(order(iridophoresandguanine_varadero.significant.color.res$padj),100),]
+iridophoresandguanine_varadero.significant.color.mat <- iridophoresandguanine_varadero.significant.color.mat - rowMeans(iridophoresandguanine_varadero.significant.color.mat)
+iridophoresandguanine_varadero.significant.color.df <- as.data.frame(colData(iridophoresandguanine_varadero.significant.color.vsd)[,c("tissue","morph")])
+
+pheatmap(iridophoresandguanine_varadero.significant.color.mat, annotation_col=iridophoresandguanine_varadero.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = F, filename = "results/figures/varadero/iridophoresandguanine_varadero_blackvsredbasic1.pdf")
+
+pheatmap(iridophoresandguanine_varadero.significant.color.mat, annotation_col=iridophoresandguanine_varadero.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = T, filename = "results/figures/varadero/iridophoresandguanine_varadero_blackvsredbasic.2.pdf")
+
+pheatmap(iridophoresandguanine_varadero.significant.color.mat, annotation_col=iridophoresandguanine_varadero.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",filename = "results/figures/varadero/iridophoresandguanine_varadero_blackvsredrow.pdf")
+
+pheatmap(iridophoresandguanine_varadero.significant.color.mat, annotation_col=iridophoresandguanine_varadero.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",main = "Sauce morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45", filename = "results/figures/varadero/iridophoresandguanine_varadero_blackvsredrow noname.pdf")
+
+pheatmap(iridophoresandguanine_varadero.significant.color.mat, annotation_col=iridophoresandguanine_varadero.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("Black","Black","Black","Black","Orange","Orange","Orange","Orange"),main = "Iridophores and pteridine", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45",annotation_legend = F)
+
+pheatmap(iridophoresandguanine_varadero.significant.color.mat, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","Varadero: Black","","","Varadero: Red",""),main = "Iridophore and pteridine", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",annotation_legend = F, gaps_col = c(4),fontsize= 15, filename = "results/figures/varadero/publication/iridophoresandguanine_varadero_blackvsred.png")
+
+```
+
+
+```{r}
+
+varadero.carotenoid.countdata<- countdata[c("dgat2", "mab21l2", "rbp1", "rbp2", "ttc39b"), 9:16]
+
+
+
+carotenoid_varadero.significant.color.dds <- DESeqDataSetFromMatrix (countData = varadero.carotenoid.countdata,
+                                       colData = varadero.skinmorph, 
+                                       design = ~ tissue)
+
+
+
+
+
+carotenoid_varadero.significant.color.vsd <- varianceStabilizingTransformation(carotenoid_varadero.significant.color.dds, blind=FALSE)
+
+carotenoid_varadero.significant.color.dds <- DESeq(carotenoid_varadero.significant.color.dds)
+
+carotenoid_varadero.significant.color.res <- results(carotenoid_varadero.significant.color.dds)
+carotenoid_varadero.significant.color.mat<- assay(carotenoid_varadero.significant.color.vsd) [ head(order(carotenoid_varadero.significant.color.res$padj),100),]
+carotenoid_varadero.significant.color.mat <- carotenoid_varadero.significant.color.mat - rowMeans(carotenoid_varadero.significant.color.mat)
+carotenoid_varadero.significant.color.df <- as.data.frame(colData(carotenoid_varadero.significant.color.vsd)[,c("tissue","morph")])
+
+pheatmap(carotenoid_varadero.significant.color.mat, annotation_col=carotenoid_varadero.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = F, filename = "results/figures/varadero/carotenoid_varadero_blackvsredbasic1.pdf")
+
+pheatmap(carotenoid_varadero.significant.color.mat, annotation_col=carotenoid_varadero.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = T, filename = "results/figures/varadero/carotenoid_varadero_blackvsredbasic.2.pdf")
+
+pheatmap(carotenoid_varadero.significant.color.mat, annotation_col=carotenoid_varadero.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",filename = "results/figures/varadero/carotenoid_varadero_blackvsredrow.pdf")
+
+pheatmap(carotenoid_varadero.significant.color.mat, annotation_col=carotenoid_varadero.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",main = "Varadero morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45", filename = "results/figures/varadero/carotenoid_varadero_blackvsredrow noname.pdf")
+
+pheatmap(carotenoid_varadero.significant.color.mat, annotation_col=carotenoid_varadero.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("Black","Black","Black","Black","Red","Red","Red","Red"),main = "Carotenoid metabolism", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45",annotation_legend = F)
+
+pheatmap(carotenoid_varadero.significant.color.mat, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","Varadero: Black","","","Varadero: Red",""),main = "Carotenoid metabolism", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",annotation_legend = F, fontsize= 15,gaps_col = c(4), filename = "results/figures/varadero/publication/carotenoid_varadero_blackvsred.png")
+
+
+cdsc
+```
+
+
+
+#### make sample spreadsheet for black and color####
+
+samples_color <- as.data.frame(filenames)
+
+# get sample
+samples_color$sample <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "Black", replacement = "") %>% gsub(pattern = "Yellow", replacement = "") %>% gsub(pattern = "Varadero", replacement = "") %>% gsub(pattern = "Sauce", replacement = "")  %>% gsub(pattern = "Red", replacement = "")
+
+# get morph
+samples_color$morph <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "Black", replacement = "") %>% gsub(pattern = "Yellow", replacement = "") %>% gsub(pattern = "[0-9]", replacement = "") %>% gsub(pattern = "Red", replacement = "") 
+samples_color$morph
+
+# get tussue
+samples_color$tissue <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "[0-9]", replacement = "") %>% gsub(pattern = "Sauce", replacement = "") %>% gsub(pattern = "Varadero", replacement = "") %>% gsub(pattern = "Yellow", replacement = "Color") %>% gsub(pattern = "Red", replacement = "Color")
+samples_color$tissue
+
+deseqsamples_color <- samples_color [,-1]
+
+list(deseqsamples_color)
+
+write.table(deseqsamples_color, "~/Google Drive/Projects/color_patch_trimmed/black vs color/allblackVScolordeseqsamples.tsv", row.names = TRUE, sep = "\t")
+
+
+
+
+AHHHHHHH
+__________________________________
+# black vs color (yellow & orange)
+```{r}
+###### list all samples from expression data ####
+# get the directory/path for each sample in this study
+base_dir <- getwd()
+
+filenames <- list.files(path = "bvsc gene counts/", full.names = F, recursive = F)
+
+files <- file.path(base_dir, "bvsc gene counts/", filenames) # files = directory + salmon directory + sample name + quantifictaion file name
+
+names(files) <- "~/Google Drive/Projects/color_patch_trimmed/bvsc gene counts/"
+all(file.exists(files)) # do these all actually exist?
+list(files)
+
+#### make sample spreadsheet for black and color####
+
+samples_color <- as.data.frame(filenames)
+
+# get sample
+samples_color$sample <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "Black", replacement = "") %>% gsub(pattern = "One", replacement = "") %>% gsub(pattern = "Varadero", replacement = "") %>% gsub(pattern = "Sauce", replacement = "") %>% gsub(pattern = "Red", replacement = "") %>% gsub(pattern = "Yellow", replacement = "")
+
+# get morph
+samples_color$morph <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "Black", replacement = "") %>% gsub(pattern = "Yellow", replacement = "") %>% gsub(pattern = "[0-9]", replacement = "") %>% gsub(pattern = "Red", replacement = "") %>% gsub(pattern = "One", replacement = "")
+samples_color$morph
+
+# get tussue
+samples_color$tissue <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "[0-9]", replacement = "") %>% gsub(pattern = "Sauce", replacement = "") %>% gsub(pattern = "Varadero", replacement = "") %>% gsub(pattern = "Yellow", replacement = "Color") %>% gsub(pattern = "Red", replacement = "Color") %>% gsub(pattern = "One", replacement = "")
+samples_color$tissue
+
+deseqsamples_color <- samples_color [,-1]
+
+list(deseqsamples_color)
+
+write.table(deseqsamples_color, "~/Google Drive/Projects/color_patch_trimmed/black vs color/allblackVScolordeseqsamples.tsv", row.names = TRUE, sep = "\t")
+
+```
+
+```{r}
+
+# create DESeq dataset for black vs color
+dds.all.blackVScolor <- DESeqDataSetFromMatrix (countData = countdata,
+                                       colData = deseqsamples_color,
+                                       design = ~ tissue)
+
+as.data.frame( colData(dds.all.blackVScolor) )
+
+#run Wald test
+dds.all.blackVScolor <- DESeq(dds.all.blackVScolor, test="Wald", parallel=TRUE, BPPARAM=SnowParam(8))
+res.all.blackVScolor <- results(dds.all.blackVScolor, parallel=TRUE, BPPARAM=SnowParam(8))
+res.all.blackVScolor$transcript <- mcols(res.all.blackVScolor)$transcript
+
+res.all.blackVScolor
+
+# how many are "significant"?
+table(res.all.blackVScolor[,"padj"] < 0.05)
+
+#color genes 
+SigGeneWrapper(res.all.blackVScolor, 0.05, "res.allblackVScolor")
+
+```
+
+```{r}
+
+vsd.all.blackVScolor <- vst(dds.all.blackVScolor)
+
+# get PC1 and PC2 data
+pcaData <- plotPCA(vsd.all.blackVScolor, intgroup = c("tissue"), returnData = TRUE)
+pcaData
+
+plotPCA(vsd.all.blackVScolor, intgroup=c("tissue"))
+
+# get percent variation
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+# pca code
+ggplot(pcaData, aes(x = PC1, y = PC2, color = tissue))+
+  stat_ellipse(aes(group = tissue), type = "t", level = 1., size = .75, show.legend = FALSE) + geom_point(size = 4, show.legend = TRUE) + 
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed() + theme_bw() + scale_shape_manual(values = c(18:15)) + scale_color_manual(values=c ("BLACK", "RED")) + labs(color = "skin color patch")  +  labs(shape = "color morph")  +  ggsave("results/figures/pca.pdf") 
+```
+
+
+
+#Black vs color
+```{r}
+allblackVScolor.significant.color.dds <- DESeqDataSetFromMatrix (countData = countdata,
+                                       colData = deseqsamples_color, 
+                                       design = ~ tissue)
+
+as.data.frame( colData(allblackVScolor.significant.color.dds) )
+
+allblackVScolor.significant.color.vsd <- varianceStabilizingTransformation(allblackVScolor.significant.color.dds, blind=FALSE)
+
+allblackVScolor.significant.color.dds <- DESeq(allblackVScolor.significant.color.dds)
+
+```
+
+#heatmap: top 100 color genes
+```{r}
+allblackVScolor.significant.color.res <- results(allblackVScolor.significant.color.dds)
+
+allblackVScolor.significant.color.mat<- assay(allblackVScolor.significant.color.vsd) [ head(order(allblackVScolor.significant.color.res$padj),100),]
+allblackVScolor.significant.color.mat <- allblackVScolor.significant.color.mat - rowMeans(allblackVScolor.significant.color.mat)
+allblackVScolor.significant.color.df <- as.data.frame(colData(allblackVScolor.significant.color.vsd)[,c("morph", "tissue")])
+
+allblackVScolor.significant.color.res
+
+pheatmap(allblackVScolor.significant.color.mat, annotation_col=allblackVScolor.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = F)#, filename = "results/figures/black vs color/allblackVScolorbasic.1.pdf")
+
+pheatmap(allblackVScolor.significant.color.mat, annotation_col=allblackVScolor.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = T)#, filename = "results/figures/black vs color/allblackVScolorbasic.2.pdf")
+
+pheatmap(allblackVScolor.significant.color.mat, annotation_col=allblackVScolor.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row")#,filename = "results/figures/black vs color/allblackVScolorbasicrow.pdf")
+
+pheatmap(allblackVScolor.significant.color.mat, annotation_col=allblackVScolor.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",main = "Black VS color (orange & red)", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45")#, filename = "results/figures/black vs color/allblackVScolorbasicrow noname.pdf")
+
+pheatmap(allblackVScolor.significant.color.mat, annotation_col=allblackVScolor.significant.color.df, cluster_cols = T, cluster_rows = T, scale = "row",main = "Black VS color (orange & red)", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",annotation_legend = T, display_numbers = TRUE,gaps_col = c(8))
+
+pheatmap(allblackVScolor.significant.color.mat, cluster_cols = F, cluster_rows = T, scale = "row",main = "Black VS color (orange & red)", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",annotation_legend = T, filename = "results/figures/blackvscolor/allblackVScolor.png")
+
+```
+
+
+
+carotenoid <- ("dgat2", "mab21l2", "ttc39b")
+iridophore <- ("fh", "gmps", "pnp", "ppat", "pts")
+pteridine <- ("gch1", "xdh")
+```{r}
+bvsc.colorgenes.countdata<- countdata[c("bmpr1a", "dct", "dgat2", "fh", "gch1", "gmps", "gpnmb", "gpr143", "kcnj13", "mab21l2", "mc1r", "mitf", "mlana", "mreg", "oca2", "pax3", "pax7", "pmel", "pnp", "ppat", "pts", "rab27a", "slc24a5", "slc45a2", "trpm1", "ttc39b", "tyrp1", "wnt16", "xdh"),]
+
+bvsc.significant.color.dds <- DESeqDataSetFromMatrix (countData = bvsc.colorgenes.countdata,
+                                       colData = deseqsamples_color, 
+                                       design = ~ tissue)
+
+bvsc.significant.color.vsd <- varianceStabilizingTransformation(bvsc.significant.color.dds, blind=FALSE)
+
+bvsc.significant.color.dds <- DESeq(bvsc.significant.color.dds)
+
+bvsc.significant.color.res <- results(bvsc.significant.color.dds)
+bvsc.significant.color.mat<- assay(bvsc.significant.color.vsd) [ head(order(bvsc.significant.color.res$padj),100),]
+bvsc.significant.color.mat <- bvsc.significant.color.mat - rowMeans(bvsc.significant.color.mat)
+bvsc.significant.color.df <- as.data.frame(colData(bvsc.significant.color.vsd)[,c("tissue","morph")])
+
+pheatmap(bvsc.significant.color.mat, annotation_col=bvsc.significant.color.df, scale = "row", cluster_cols = F, cluster_rows = F)
+#, filename = "results/figures/blackvscolor/bvsc_blackvsredbasic1.pdf")
+
+pheatmap(bvsc.significant.color.mat, annotation_col=bvsc.significant.color.df, scale = "row", cluster_cols = F, cluster_rows = T)
+#, filename = "results/figures/blackvscolor/bvsc_blackvsredbasic.2.pdf")
+
+pheatmap(bvsc.significant.color.mat, annotation_col=bvsc.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row")
+#, filename = "results/figures/blackvscolor/bvsc_blackvsredrow.pdf")
+
+pheatmap(bvsc.significant.color.mat, annotation_col=bvsc.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",main = "varadero morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45")
+#, filename = "results/figures/blackvscolor/bvsc_blackvsredrow noname.pdf")
+
+
+pheatmap(bvsc.significant.color.mat, annotation_col=bvsc.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","","","Black","","","","Color","All","","","","All","","",""), main = "black vs color", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45",annotation_legend = F)
+
+pheatmap(bvsc.significant.color.mat, annotation_col=bvsc.significant.color.df, cluster_cols = T, cluster_rows = T, scale = "row", main = "black vs color", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45",annotation_legend = F)
+
+pheatmap(bvsc.significant.color.mat, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","All","","","","Colors","","","","","","Black","","","All",""),main = "black vs color", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",gaps_col = c(8),annotation_legend = F, filename = "results/figures/blackvscolor/bvsc_blackvsred.png")
+```
+
+#heatmap: melanin
+```{r}
+bvsc.melanin.countdata<- countdata[c("dct", "dgat2", "gpnmb", "gpr143", "kcnj13", "mc1r", "mitf", "mlana", "mreg", "oca2", "pax3", "pax7", "pmel", "rab27a", "slc24a5", "slc45a2", "trpm1", "tyrp1", "wnt16"),]
+
+melanin_bvsc.significant.color.dds <- DESeqDataSetFromMatrix (countData = bvsc.melanin.countdata,
+                                       colData = deseqsamples_color, 
+                                       design = ~ tissue)
+
+melanin_bvsc.significant.color.vsd <- varianceStabilizingTransformation(melanin_bvsc.significant.color.dds, blind=FALSE)
+
+melanin_bvsc.significant.color.dds <- DESeq(melanin_bvsc.significant.color.dds)
+
+melanin_bvsc.significant.color.res <- results(melanin_bvsc.significant.color.dds)
+melanin_bvsc.significant.color.mat<- assay(melanin_bvsc.significant.color.vsd) [ head(order(melanin_bvsc.significant.color.res$padj),100),]
+melanin_bvsc.significant.color.mat <- melanin_bvsc.significant.color.mat - rowMeans(melanin_bvsc.significant.color.mat)
+melanin_bvsc.significant.color.df <- as.data.frame(colData(melanin_bvsc.significant.color.vsd)[,c("tissue","morph")])
+
+pheatmap(melanin_bvsc.significant.color.mat, annotation_col=melanin_bvsc.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = F)
+#, filename = "results/figures/blackvscolor/melanin_bvsc_blackvsredbasic1.pdf")
+
+pheatmap(melanin_bvsc.significant.color.mat, annotation_col=melanin_bvsc.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = T)
+#, filename = "results/figures/blackvscolor/melanin_bvsc_blackvsredbasic.2.pdf")
+
+pheatmap(melanin_bvsc.significant.color.mat, annotation_col=melanin_bvsc.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row")
+         #,filename = "results/figures/backvscolor/melanin_bvsc_blackvsredrow.pdf")
+
+pheatmap(melanin_bvsc.significant.color.mat, annotation_col=melanin_bvsc.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",main = "Varadero morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45")
+#, filename = "results/figures/blackvscolor/melanin_bvsc_blackvsredrow noname.pdf")
+
+pheatmap(melanin_bvsc.significant.color.mat, annotation_col=melanin_bvsc.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("Black","Black","Black","Black","red","red","red","red"),main = "Melanin/melanosome synthesis", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45",annotation_legend = F)
+
+pheatmap(melanin_bvsc.significant.color.mat, annotation_col=melanin_bvsc.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("Black","Black","Black","Black","red","red","red","red"),main = "Melanin/melanosome synthesis", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45",annotation_legend = F)
+
+pheatmap(melanin_bvsc.significant.color.mat, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","","All","","Black","","","","","","Color","","",""),main = "Melanin/melanosome synthesis", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",annotation_legend = F, gaps_col = c(8), fontsize= 15, filename = "results/figures/blackvscolor/publication/melanin_bvsc_blackvsred.png")
+```
+
+
+
+#heatmap: black vs color iridophores and pteridine
+```{r}
+bvsc.iridophoresandguanine.countdata<- countdata[c("fh", "gmps", "pnp", "ppat", "pts", "gch1", "xdh"),]
+
+
+iridophoresandguanine_bvsc.significant.color.dds <- DESeqDataSetFromMatrix (countData = bvsc.iridophoresandguanine.countdata,
+                                       colData = deseqsamples_color, 
+                                       design = ~ tissue)
+
+
+iridophoresandguanine_bvsc.significant.color.vsd <- varianceStabilizingTransformation(iridophoresandguanine_bvsc.significant.color.dds, blind=FALSE)
+
+iridophoresandguanine_bvsc.significant.color.dds <- DESeq(iridophoresandguanine_bvsc.significant.color.dds)
+
+iridophoresandguanine_bvsc.significant.color.res <- results(iridophoresandguanine_bvsc.significant.color.dds)
+iridophoresandguanine_bvsc.significant.color.mat<- assay(iridophoresandguanine_bvsc.significant.color.vsd) [ head(order(iridophoresandguanine_bvsc.significant.color.res$padj),100),]
+iridophoresandguanine_bvsc.significant.color.mat <- iridophoresandguanine_bvsc.significant.color.mat - rowMeans(iridophoresandguanine_bvsc.significant.color.mat)
+iridophoresandguanine_bvsc.significant.color.df <- as.data.frame(colData(iridophoresandguanine_bvsc.significant.color.vsd)[,c("tissue","morph")])
+
+pheatmap(iridophoresandguanine_bvsc.significant.color.mat, annotation_col=iridophoresandguanine_bvsc.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = F)#, filename = "results/figures/blackvscolor/iridophoresandguanine_bvsc_blackvsredbasic1.pdf")
+
+pheatmap(iridophoresandguanine_bvsc.significant.color.mat, annotation_col=iridophoresandguanine_bvsc.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = T)#, filename = "results/figures/blackvscolor/iridophoresandguanine_bvac_blackvsredbasic.2.pdf")
+
+pheatmap(iridophoresandguanine_bvsc.significant.color.mat, annotation_col=iridophoresandguanine_bvsc.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row")#,filename = "results/figures/blackvscolor/iridophoresandguanine_bvsc_blackvsredrow.pdf")
+
+pheatmap(iridophoresandguanine_bvsc.significant.color.mat, annotation_col=iridophoresandguanine_bvsc.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",main = "Sauce morph", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45")#, filename = "results/figures/blackvscolor/iridophoresandguanine_bvsc_blackvsredrow noname.pdf")
+
+pheatmap(iridophoresandguanine_bvsc.significant.color.mat, annotation_col=iridophoresandguanine_bvsc.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",main = "Iridophores and pteridine", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), fontsize = 15, angle_col = "90",annotation_legend = F)
+
+pheatmap(iridophoresandguanine_bvsc.significant.color.mat, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","","All","","Black","","","","","","Color","","",""),main = "Iridophore and pteridine", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",annotation_legend = F, gaps_col = c(8),fontsize= 15, filename = "results/figures/blackvscolor/publication/iridophoresandguanine_bvscolor_blackvsred.png")
+
+```
+
+#Heatmap: black vs color carotenoid
+```{r}
+
+bvsc.carotenoid.countdata<- countdata[c("dgat2", "mab21l2", "ttc39b"),]
+
+
+
+carotenoid_bvsc.significant.color.dds <- DESeqDataSetFromMatrix (countData = bvsc.carotenoid.countdata,
+                                       colData = deseqsamples_color, 
+                                       design = ~ tissue)
+
+
+
+
+
+carotenoid_bvsc.significant.color.vsd <- varianceStabilizingTransformation(carotenoid_bvsc.significant.color.dds, blind=FALSE)
+
+carotenoid_bvsc.significant.color.dds <- DESeq(carotenoid_bvsc.significant.color.dds)
+
+carotenoid_bvsc.significant.color.res <- results(carotenoid_bvsc.significant.color.dds)
+carotenoid_bvsc.significant.color.mat<- assay(carotenoid_bvsc.significant.color.vsd) [ head(order(carotenoid_bvsc.significant.color.res$padj),100),]
+carotenoid_bvsc.significant.color.mat <- carotenoid_bvsc.significant.color.mat - rowMeans(carotenoid_bvsc.significant.color.mat)
+carotenoid_bvsc.significant.color.df <- as.data.frame(colData(carotenoid_bvsc.significant.color.vsd)[,c("tissue","morph")])
+
+pheatmap(carotenoid_bvsc.significant.color.mat, annotation_col=carotenoid_bvsc.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = F)#, filename = "results/figures/blackvscolor/carotenoid_bvsc_blackvsredbasic1.pdf")
+
+pheatmap(carotenoid_bvsc.significant.color.mat, annotation_col=carotenoid_bvsc.significant.color.df,scale = "row", cluster_cols = F, cluster_rows = T)#, filename = "results/figures/blackvscolor/carotenoid_bvsc_blackvsredbasic.2.pdf")
+
+pheatmap(carotenoid_bvsc.significant.color.mat, annotation_col=carotenoid_bvsc.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row")#,filename = "results/figures/blackvscolor/carotenoid_bvsc_blackvsredrow.pdf")
+
+pheatmap(carotenoid_bvsc.significant.color.mat, annotation_col=carotenoid_bvsc.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",main = "black vs color", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45")#, filename = "results/figures/bvsc/carotenoid_bvsc_blackvsredrow noname.pdf")
+
+pheatmap(carotenoid_bvsc.significant.color.mat, annotation_col=carotenoid_bvsc.significant.color.df, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("Black","Black","Black","Black","Red","Red","Red","Red"),main = "Carotenoid metabolism", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "45",annotation_legend = F)
+
+pheatmap(carotenoid_bvsc.significant.color.mat, cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","","All","","Black","","","","","","Color","","",""),main = "Carotenoid metabolism", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",annotation_legend = F, fontsize= 15,gaps_col = c(8), filename = "results/figures/blackvscolor/publication/carotenoid_bvsc_blackvsred.png")
+```
+
