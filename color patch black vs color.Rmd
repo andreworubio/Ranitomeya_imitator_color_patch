@@ -1,0 +1,296 @@
+---
+title: "color patch black vs color"
+author: "Andrew O. Rubio"
+date: "10/22/2020"
+output: html_document
+---
+
+---
+title: "color patch trimmed black vs color"
+author: "Andrew O. Rubio"
+date: "10/20/2020"
+output: html_document
+---
+
+
+```{r}
+library(tximport)
+library(DESeq2)
+library(dplyr)
+library(foreach)
+library(data.table)
+library(splines)
+library(ggthemes)
+library(scales)
+library(gridExtra)
+library(tidyr)
+library(pheatmap)
+library(RColorBrewer)
+library(ggplot2)
+library("BiocParallel")
+register(SnowParam(8))
+library(apeglm)
+library(tidyverse)
+library(topGO)
+library(GO.db)
+library(tidyverse)
+library(SummarizedExperiment)
+library(pcaExplorer)
+```
+
+
+Some functions for this analysis.
+
+```{r}
+# this function pulls out particular a priori genes of interest into a new data frame
+aprioris <- function(df, annos){
+  df.aprioris <- data.frame()
+  for (i in 1:length(colors$gene_name)){
+    searchterm <- paste0("\\b", colors$gene_name[i], "\\b")
+    searchterm <- tolower(searchterm)
+    tmp <- df %>% filter(str_detect(Gene, searchterm))
+    df.aprioris <- rbind(df.aprioris, tmp)
+}
+   return(df.aprioris)
+}
+
+# this function extracts all genes below a specified alpha value, prints the number of DE genes to screen, and saves a spreadsheet to file
+siggies <- function(df, alpha, csv){
+  sigs <- df %>% filter(padj < alpha)
+  print(paste0("Number of significant genes: ", length(sigs$padj)))
+  write.csv(sigs, csv, row.names = FALSE)
+  return(sigs)
+}
+
+
+# significant gene wrapper function
+SigGeneWrapper <- function(model_output, alpha, comparison){
+  print(paste0("Running ", comparison, " with alpha = ", alpha))
+  df <- setDT(as.data.frame(model_output), keep.rownames = "Gene")
+  # add annotation data
+  #df1 <- dplyr::left_join(df, annos, by = "transcript") 
+  # get significant genes
+  print("Overall significant genes")
+  sigs <- siggies(df, alpha, paste0("results/results/", comparison, "_genes.csv"))
+  # add annotation data
+  colordf <- aprioris(df, annos)
+  #get significant color genes
+  print("Significant color genes")
+  color.sigs <- siggies(colordf, alpha, paste0("results/results/", comparison, "_colorgenes.csv"))
+}
+
+```
+
+#Data import
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+```{r}
+###### list all samples from expression data ####
+# get the directory/path for each sample in this study
+base_dir <- getwd()
+
+filenames <- list.files(path = "bvsc gene counts/", full.names = F, recursive = F)
+
+files <- file.path(base_dir, "bvsc gene counts/", filenames) # files = directory + salmon directory + sample name + quantifictaion file name
+
+names(files) <- "~/Google Drive/Projects/color_patch_trimmed/bvsc gene counts/"
+all(file.exists(files)) # do these all actually exist?
+list(files)
+
+#### make sample spreadsheet for black and color####
+
+samples_color <- as.data.frame(filenames)
+
+# get sample
+samples_color$sample <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "Black", replacement = "") %>% gsub(pattern = "One", replacement = "") %>% gsub(pattern = "Varadero", replacement = "") %>% gsub(pattern = "Sauce", replacement = "") %>% gsub(pattern = "Red", replacement = "") %>% gsub(pattern = "Yellow", replacement = "")
+
+# get morph
+samples_color$morph <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "Black", replacement = "") %>% gsub(pattern = "Yellow", replacement = "") %>% gsub(pattern = "[0-9]", replacement = "") %>% gsub(pattern = "Red", replacement = "") %>% gsub(pattern = "One", replacement = "")
+samples_color$morph
+
+# get tussue
+samples_color$tissue <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "[0-9]", replacement = "") %>% gsub(pattern = "Sauce", replacement = "") %>% gsub(pattern = "Varadero", replacement = "") %>% gsub(pattern = "Yellow", replacement = "Color") %>% gsub(pattern = "Red", replacement = "Color") %>% gsub(pattern = "One", replacement = "")
+samples_color$tissue
+
+deseqsamples_color <- samples_color [,-1]
+
+list(deseqsamples_color)
+
+write.table(deseqsamples_color, "~/Google Drive/Projects/color_patch_trimmed/black vs color/allblackVScolordeseqsamples.tsv", row.names = TRUE, sep = "\t")
+
+```
+
+
+
+
+
+# Import expression data from.
+```{r}
+annos <- fread("Ranitomeya_imitator.imitator.1.3.6.annotations.genesymbol.tsv", header = FALSE)
+colnames(annos) <- c("transcript", "Gene")
+annos$Gene <- tolower(annos$Gene)
+
+# rname columns from annos file
+# import data
+countdata <- data.frame(annos$transcript)
+colnames(countdata) <- "transcript"
+for (counts in (1:length(filenames))) {
+  # import data for that sample
+  toimport <- filenames[counts]
+tmpdata <- read.table(paste0("bvsc gene counts/", toimport), header = FALSE, sep = "\t")
+  # sample id
+  samplename <- toimport %>% gsub(pattern = ".gene.counts", replacement = "")
+  colnames(tmpdata) <- c("transcript", samplename)
+  countdata <- dplyr::left_join(countdata, tmpdata, by = "transcript")
+}
+
+
+dim(countdata)
+countdata <- data.frame(countdata, row.names = 1)
+head(countdata)
+head(annos)
+```
+
+# Import a priori candidate color gene
+```{r}
+colors <- read.csv("new_color_genes.csv", header = TRUE)
+colnames(colors) <- "gene_name" 
+colors$gene_name <- tolower(colors$gene_name)
+head(colors)
+```
+
+# Quick data control. Change and "NA" values to "0". Also remove any row with total expression <50 (or 1 count/every 3rd sample).
+```{r}
+# change all NA to 0
+print(paste("Number of NA after import:", sum(is.na(countdata))))
+countdata[is.na(countdata)] <-  0
+print(paste("Number of NA after NA removal:", sum(is.na(countdata))))
+
+# remove any row with total expression < 10
+print(paste("Number of rows (transcripts) after import:", nrow(countdata)))
+keep <- rowSums(countdata) >= 50
+countdata <- countdata[keep,]
+print(paste("Number of rows (transcripts) after filter:", nrow(countdata)))
+
+head(countdata)
+countdata
+write.csv(countdata, "~/Google Drive/Projects/color_patch_trimmed/results/blackvscolor_count_data.csv", row.names = F)
+```
+
+```{r}
+# make rownames column 1
+countdata <- setDT(countdata, keep.rownames = "transcript")[]
+
+# add gene symbol
+countdata2 <- dplyr::left_join(annos, countdata, by = "transcript")
+
+# change all NA to 0
+print(paste("Number of NA after import:", sum(is.na(countdata2))))
+countdata2[is.na(countdata2)] <-  0
+print(paste("Number of NA after NA removal:", sum(is.na(countdata2))))
+
+
+# combine all counts that map to the same gene
+countdata3 <- aggregate(countdata2[, 3:18], list(countdata2$Gene), sum)
+countdata3[is.na(countdata3)] <-  0
+colnames(countdata3)[1] <- "Gene"
+countdata <- countdata3
+
+countdata <- data.frame(countdata, row.names = 1)
+
+#newcountdata<- countdata[, c("Sauce_Black_15", "Sauce_Black_29")]
+
+# save gene-level count data
+write.table(countdata, "results/bvsc.gene.level.count.data.tsv", row.names = TRUE, sep = "\t")
+jfdsalhfjdklakh
+```
+
+
+
+
+
+
+```{r}
+# create DESeq dataset for black vs color
+dds.all.blackVScolor <- DESeqDataSetFromMatrix (countData = countdata,
+                                       colData = deseqsamples_color,
+                                       design = ~ tissue)
+
+as.data.frame( colData(dds.all.blackVScolor) )
+
+#run Wald test
+dds.all.blackVScolor <- DESeq(dds.all.blackVScolor, test="Wald", parallel=TRUE, BPPARAM=SnowParam(8))
+res.all.blackVScolor <- results(dds.all.blackVScolor, parallel=TRUE, BPPARAM=SnowParam(8))
+res.all.blackVScolor$transcript <- mcols(res.all.blackVScolor)$transcript
+
+res.all.blackVScolor
+
+# how many are "significant"?
+table(res.all.blackVScolor[,"padj"] < 0.05)
+
+#color genes 
+SigGeneWrapper(res.all.blackVScolor, 0.05, "res.allblackVScolor")
+
+```
+
+```{r}
+
+vsd.all.blackVScolor <- vst(dds.all.blackVScolor)
+
+# get PC1 and PC2 data
+pcaData <- plotPCA(vsd.all.blackVScolor, intgroup = c("tissue"), returnData = TRUE)
+pcaData
+
+plotPCA(vsd.all.blackVScolor, intgroup=c("tissue"))
+
+# get percent variation
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+# pca code
+ggplot(pcaData, aes(x = PC1, y = PC2, color = tissue))+
+  stat_ellipse(aes(group = tissue), type = "t", level = 1., size = .75, show.legend = FALSE) + geom_point(size = 4, show.legend = TRUE) + 
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed() + theme_bw() + scale_shape_manual(values = c(18:15)) + scale_color_manual(values=c ("BLACK", "RED")) + labs(color = "skin color patch")  +  labs(shape = "color morph")  +  ggsave("results/figures/pca.pdf") 
+```
+
+
+```{r}
+bvsc.significant.color.dds <- DESeqDataSetFromMatrix (countData = countdata,
+                                       colData = deseqsamples_color, 
+                                       design = ~ tissue)
+
+
+
+bvsc.significant.color.vsd <- varianceStabilizingTransformation(bvsc.significant.color.dds, blind=FALSE)
+
+bvsc.significant.color.mat<- assay(bvsc.significant.color.vsd)
+
+bvsc.significant.color.dds <- DESeq(bvsc.significant.color.dds)
+
+bvsc.significant.color.res <- results(bvsc.significant.color.dds)
+
+bvsc.significant.color.df <- as.data.frame(colData(bvsc.significant.color.vsd)[,c("tissue","morph")])
+
+#melanin
+bvsc.melanin<- c("dct", "gpnmb", "gpr143", "kcnj13", "mc1r", "mitf", "mlana", "mreg", "oca2", "pax3", "pax7", "pmel", "rab27a", "slc24a5", "slc45a2", "trpm1", "tyrp1", "wnt16")
+
+pheatmap(bvsc.significant.color.mat[bvsc.melanin,], cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","","All Black","","","","Color","",""),main = "Melanin/melanosome synthesis", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",annotation_legend = F, gaps_col = c(8), fontsize= 15)#, filename = "results/figures/blackvscolor/publication/melanin_bvsc_blackvsred.png")
+
+#iridophore
+
+bvsc.iridophores<- c("fh", "gmps", "pnp", "ppat", "pts", "gch1", "xdh")
+
+pheatmap(bvsc.significant.color.mat[bvsc.iridophores,], cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","","All Black","","","","Color","",""),main = "iridophores and pteridine", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",annotation_legend = F, gaps_col = c(8), fontsize= 15)#, filename = "results/figures/blackvscolor/publication/iiridophore_bvsc_blackvsred.png")
+
+#carotenoid
+bvsc.carotenoid<- c("dgat2", "mab21l2", "ttc39b")
+
+pheatmap(bvsc.significant.color.mat[bvsc.carotenoid,], cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","","All Black","","","","Color","",""),main = "carotenoid metabolism", border_color="Black", color = colorRampPalette(c("navy", "white", "firebrick3"))(50), angle_col = "0",annotation_legend = F, gaps_col = c(8), fontsize= 15)#, filename = "results/figures/blackvscolor/publication/carotenoid_bvsc_blackvsred.png")
+```
