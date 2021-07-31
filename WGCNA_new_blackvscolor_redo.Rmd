@@ -1,0 +1,867 @@
+---
+title: "WGCNA_new_blackvscolor_redo"
+author: "Andrew O. Rubio"
+date: "7/26/2021"
+output: html_document
+---
+
+
+---
+title: "WGCNA_new_blackvscolor"
+author: "Andrew O. Rubio"
+date: "9/25/2020"
+output: html_document
+---
+
+```{r global_options, include=FALSE}
+# load packages required for analyses
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
+library(tximport)
+library(DESeq2)
+library(foreach)
+library(data.table)
+library(splines)
+library(ggthemes)
+library(scales)
+library(gridExtra)
+library(pheatmap)
+library(RColorBrewer)
+library(ggplot2)
+library(BiocParallel)
+register(SnowParam(8)) # set the number of threads to something reasonable
+library(apeglm)
+library(topGO)
+library(GO.db)
+
+
+library(WGCNA)
+library(flashClust)
+library(nlme)
+library(tximport)
+library(DESeq2)
+#library(dplyr)
+library(foreach)
+library(data.table)
+library(splines)
+library(ggthemes)
+library(scales)
+library(gridExtra)
+#library(tidyr)
+library(pheatmap)
+library(RColorBrewer)
+library(ggplot2)
+library("BiocParallel")
+register(SnowParam(8))
+library(apeglm)
+#library(tidyverse)
+library(topGO)
+library(GO.db)
+#library(tidyverse)
+```
+
+```{r adam's fancy functions}
+
+# this first function runs a Walds test between specified groups, then returns a dataframe from it.
+getDEdf <- function(dds, treatment, group1, group2){
+  res <- results(dds, contrast = c(treatment, group1, group2))
+  res.df <- setDT(as.data.frame(res), keep.rownames = "transcript")
+  # add gene annotation information
+  res.df <- dplyr::left_join(res.df, annos, by = "transcript")
+  return(res.df)
+}
+
+# this function pulls out particular a priori genes of interest into a new data frame
+aprioris <- function(df, annos){
+  df.aprioris <- data.frame()
+  for (i in 1:length(colors$gene_name)){
+    searchterm <- paste0("\\b", colors$gene_name[i], "\\b")
+    searchterm <- tolower(searchterm)
+    tmp <- df %>% filter(str_detect(Gene, searchterm))
+    df.aprioris <- rbind(df.aprioris, tmp)
+}
+   return(df.aprioris)
+}
+
+# this function extracts all genes below a specified alpha value, prints the number of DE genes to screen, and saves a spreadsheet to file
+siggies <- function(df, alpha, csv){
+  sigs <- df %>% filter(padj < alpha)
+  print(paste0("Number of significant genes: ", length(sigs$padj)))
+  write.csv(sigs, csv, row.names = FALSE)
+  return(sigs)
+}
+
+
+# significant gene wrapper function
+SigGeneWrapper <- function(model_output, alpha, comparison){
+  print(paste0("Running ", comparison, " with alpha = ", alpha))
+  df <- setDT(as.data.frame(model_output), keep.rownames = "Gene")
+  # add annotation data
+  #df1 <- dplyr::left_join(df, annos, by = "transcript") 
+  # get significant genes
+  print("Overall significant genes")
+  sigs <- siggies(df, alpha, paste0("results/results/", comparison, "_genes.csv"))
+  # add annotation data
+  colordf <- aprioris(df, annos)
+  #get significant color genes
+  print("Significant color genes")
+  color.sigs <- siggies(colordf, alpha, paste0("results/results/", comparison, "_colorgenes.csv"))
+}
+
+# Define ggplot aesthetic.
+
+mytheme <- theme_classic() + theme(axis.text=element_text(size=20), 
+        axis.title=element_text(size=22,face="bold"), 
+        plot.title = element_text(size = 22, hjust = 0.5), strip.text.x = element_text(size = 22),
+        panel.border = element_rect(color = "black", fill = NA, size = 1), legend.position = "none")
+
+
+### Functions for plotting
+
+# pull in DE genes that were saved as .csvs
+DEgenes <- function(comparison, aretheycolors){
+  genes <- read.csv(paste0("results/results", comparison, "_", aretheycolors, ".csv"))
+  #genes <- unique(tmp$Gene)
+  return(genes)
+}
+
+#### extract the data from the DESeq models
+
+
+
+# genes = list of genes
+# dds = deseq2 object
+# annos = transcript 2 gene name df
+# sampledata = sample ... data ...
+extractTadCounts <- function(genes, dds, annos, sampledata){
+  # make gene a character
+  genes$Gene <- as.character(genes$Gene)
+  #### for loop to extract counts
+  # make empty data frame
+  countdf <- data.frame()
+  for (i in 1:nrow(genes)){
+    #target <- as.character(genes$transcript[i])
+    gene <- genes$Gene[i]
+    #print(target)
+    print(gene)
+    # pull out count data
+    tmp <- trycatch_plotCounts(dds, gene)
+    if (tmp == "transcript missing") {
+      rm(tmp) 
+    } else {
+     # make rownames a column
+    tmp <- setDT(tmp, keep.rownames = TRUE)
+    # change name of new first column
+    colnames(tmp)[1] <- "sample"
+    # add gene name to a column
+    tmp$Gene <- gene
+    # add transcript id to a column
+    #tmp$transcript<- target
+    # add all to a data frame
+    countdf <- rbind(countdf, tmp)     
+    } # end of if statement
+    } # end of loop
+
+  # add a column for species
+  #colnames(countdf)[1] <- "Name"
+  info <- sampledata[,c("sample","species")]
+  countdf <- dplyr::left_join(countdf, info, by = "sample")
+
+  return(countdf)
+}
+
+extractCounts <- function(genes, dds, annos, sampledata){
+  # gene2tx <- annos[annos$Gene %in% genes, ]
+  #### for loop to extract counts
+  # make empty data frame
+  countdf <- data.frame()
+  for (i in 1:length(genes)){
+    genes <- as.character(genes)
+    gene <- genes[i]
+    #gene_symbol <- genes$gene_symbol[i]
+    #print(target)
+    print(gene)
+    # pull out count data
+    tmp <- trycatch_plotCounts(dds, gene)
+    if (tmp == "transcript missing") {
+      rm(tmp) 
+    } else {
+     # make rownames a column
+    tmp <- setDT(tmp, keep.rownames = TRUE)
+    # change name of new first column
+    colnames(tmp)[1] <- "sample"
+    # add gene name to a column
+    tmp$Gene <- gene
+    # add transcript id to a column
+    #tmp$transcript<- target
+    # add gene symbol to a column
+    #tmp$gene_symbol <- gene_symbol
+    # add all to a data frame
+    countdf <- rbind(countdf, tmp)     
+    } # end of if statement
+    } # end of loop
+
+  # add a column for species
+  #colnames(countdf)[1] <- "Name"
+  info <- sampledata[,c("sample","species")]
+  countdf <- dplyr::left_join(countdf, info, by = "sample")
+
+  return(countdf)
+}
+
+
+
+# extract the transcript ids from a list of genes. Supply gene names + annotation document
+targetedgenes <- function(genes, annos){
+  df.targetedgenes <- data.frame()
+  for (i in 1:length(genes)){
+    searchterm <- paste0("\\b", genes[i], "\\b")
+    searchterm <- tolower(searchterm)
+    tmp <- annos %>% filter(str_detect(Gene, searchterm))
+    tmp$gene_symbol <- genes[i]
+    df.targetedgenes <- rbind(df.targetedgenes, tmp)
+}
+   return(df.targetedgenes)
+}
+```
+
+#### WGCNA analyses
+
+```{r}
+
+###### list all samples from expression data ####
+# get the directory/path for each sample in this study
+base_dir <- getwd()
+
+filenames <- list.files(path = "gene counts/", full.names = F, recursive = F)
+
+files <- file.path(base_dir, "gene counts/", filenames) # files = directory + salmon directory + sample name + quantifictaion file name
+
+names(files) <- "~/Google Drive/Projects/color_patch_trimmed_redo/WGCNA/gene counts/"
+all(file.exists(files)) # do these all actually exist?
+list(files)
+
+#### make sample spreadsheet####
+
+samples <- as.data.frame(filenames)
+
+# get sample
+samples$sample <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "Black", replacement = "") %>% gsub(pattern = "Yellow", replacement = "") %>% gsub(pattern = "Varadero", replacement = "") %>% gsub(pattern = "Sauce", replacement = "")  %>% gsub(pattern = "Orange", replacement = "")
+
+# get tussue
+samples$tissue <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "[0-9]", replacement = "") %>% gsub(pattern = "Sauce", replacement = "") %>% gsub(pattern = "Varadero", replacement = "")
+samples$tissue
+
+# get morph
+samples$morph <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "Black", replacement = "") %>% gsub(pattern = "Yellow", replacement = "") %>% gsub(pattern = "[0-9]", replacement = "") %>% gsub(pattern = "Orange", replacement = "") 
+samples$morph
+
+# save as spreadsheet
+#dir.create("~/Google Drive/Color patch/results")
+write.csv(samples, "~/Google Drive/Projects/color_patch_trimmed_redo/WGCNA/resultssamplespreadsheet.csv", row.names = F)
+
+deseqsamples <- samples [,-1]
+
+list(deseqsamples)
+
+WGCNAsamples <- deseqsamples
+
+```
+
+
+# Import expression data from.
+```{r}
+annos <- fread("~/Google Drive/Projects/color_patch_trimmed_redo/Ranitomeya_imitator.imitator.1.3.6.annotations.pupative_test_genesymbol copy.tsv", header = FALSE)
+
+colnames(annos) <- c("transcript", "Gene")
+
+annos$Gene <- tolower(annos$Gene)
+
+# rname columns from annos file
+
+# import data
+countdata <- data.frame(annos$transcript)
+colnames(countdata) <- "transcript"
+for (counts in (1:length(filenames))) {
+  # import data for that sample
+  toimport <- filenames[counts]
+tmpdata <- read.table(paste0("gene counts/", toimport), header = FALSE, sep = "\t")
+  # sample id
+  samplename <- toimport %>% gsub(pattern = ".gene.counts", replacement = "")
+  colnames(tmpdata) <- c("transcript", samplename)
+  countdata <- dplyr::left_join(countdata, tmpdata, by = "transcript")
+}
+
+dim(countdata)
+
+countdata <- data.frame(countdata, row.names = 1)
+
+head(countdata)
+
+head(annos)
+
+```
+
+# Quick data control. Change and "NA" values to "0". Also remove any row with total expression <50 (or 1 count/every 3rd sample).
+```{r}
+# change all NA to 0
+
+print(paste("Number of NA after import:", sum(is.na(countdata))))
+countdata[is.na(countdata)] <-  0
+print(paste("Number of NA after NA removal:", sum(is.na(countdata))))
+
+# remove any row with total expression < 10
+
+print(paste("Number of rows (transcripts) after import:", nrow(countdata)))
+keep <- rowSums(countdata) >= 50
+countdata <- countdata[keep,]
+print(paste("Number of rows (transcripts) after filter:", nrow(countdata)))
+
+head(countdata)
+
+#countdata <- data.frame(countdata, row.names = 1)
+
+
+WGCNAdata <- countdata
+
+#write.csv(WGCNAdata, "~/Google Drive/Color patch/WGCNA/results/countdata.csv", row.names = T)
+
+```
+
+```{r}
+# make rownames column 1
+WGCNAdata <- setDT(WGCNAdata, keep.rownames = "transcript")[]
+
+# add gene symbol
+WGCNAdata2 <- dplyr::left_join(annos, WGCNAdata, by = "transcript")
+
+# change all NA to 0
+print(paste("Number of NA after import:", sum(is.na(WGCNAdata2))))
+WGCNAdata2[is.na(WGCNAdata2)] <-  0
+print(paste("Number of NA after NA removal:", sum(is.na(WGCNAdata2))))
+
+head(WGCNAdata2)
+# combine all counts that map to the same gene
+WGCNAdata3 <- aggregate(WGCNAdata2[, 3:18], list(WGCNAdata2$Gene), sum)
+WGCNAdata3[is.na(WGCNAdata3)] <-  0
+colnames(WGCNAdata3)[1] <- "Gene"
+WGCNAdata <- WGCNAdata3
+head(WGCNAdata)
+
+WGCNAdata <- data.frame(WGCNAdata, row.names = 1)
+
+```
+
+
+```{r}
+WGCNAsamples <- read.csv("WGCNA_blackvscolor.csv")
+dds <- DESeqDataSetFromMatrix(countData = WGCNAdata,
+                                       colData = WGCNAsamples,
+                                       design = ~ Black_vs_Color + morph)
+as.data.frame(colData(dds))
+
+```
+
+
+
+
+
+```{r}
+## using counts imported via tximports from above
+vsd <- vst(dds, blind = FALSE)
+vsd <- assay(vsd)
+# transpose, as required by WGCNA
+vsd <- as.data.frame(t(vsd))
+ vsd
+```
+
+
+
+checking for outliers... 
+```{r}
+# check if there are gene outliers
+gsg = goodSamplesGenes(vsd, verbose = 3)
+gsg$allOK
+
+```
+
+
+
+# there are outliers ... must remove them
+```{r}
+if (!gsg$allOK)
+   {if (sum(!gsg$goodGenes)>0)
+       printFlush(paste("Removing genes:", paste(names(vsd)[!gsg$goodGenes], collapse= ", ")));
+       if (sum(!gsg$goodSamples)>0)
+           printFlush(paste("Removing samples:", paste(rownames(vsd)[!gsg$goodSamples], collapse=", ")))
+       vsdd= vsd[gsg$goodSamples, gsg$goodGenes]
+}
+
+gsg = goodSamplesGenes(vsdd, verbose = 3)
+gsg$allOK
+
+```
+
+
+Do they match up?
+
+```{r}
+
+# verify data and sample information align
+table(WGCNAsamples$sample==rownames(vsdd))
+
+# make sample id row name...
+WGCNAsamples <- data.frame(WGCNAsamples[,-1], row.names=WGCNAsamples[,1])
+WGCNAsamples <- data.frame(WGCNAsamples[,-1], row.names=WGCNAsamples[,1])
+```
+
+cluster samples by expression
+```{r}
+A = adjacency(t(vsdd),type="signed") # this calculates the whole network connectivity
+k = as.numeric(apply(A,2,sum))-1 # standardized connectivity
+Z.k = scale(k)
+thresholdZ.k = -2.5 # often -2.5
+outlierColor = ifelse(Z.k<thresholdZ.k,"red","black")
+sampleTree = flashClust(as.dist(1-A), method = "average")
+# Convert traits to a color representation where red indicates high values
+# needs to be numeric
+
+WGCNAsamples$Black_vs_Color <- as.numeric(WGCNAsamples$Black_vs_Color)
+WGCNAsamples$morph <- as.numeric(WGCNAsamples$morph)
+summary(WGCNAsamples)
+
+WGCNAsamples$Black_vs_Color
+WGCNAsamples$morph
+
+
+traitColors=data.frame(numbers2colors(WGCNAsamples,signed=FALSE))
+dimnames(traitColors)[[2]]=paste(names(WGCNAsamples))
+datColors=data.frame(outlier=outlierColor,traitColors)
+
+#colnames(WGCNAsamples) <- c("black and colors", "morph")
+
+plotDendroAndColors(sampleTree, groupLabels = names(datColors), colors = datColors, main="sample")
+```
+
+Remove outlying samples 
+
+```{r}
+remove.samples= Z.k<thresholdZ.k | is.na(Z.k)
+vsdd=vsdd[!remove.samples,]
+WGCNAsamples=WGCNAsamples[!remove.samples,]
+A=adjacency(t(vsdd),type="distance")
+k=as.numeric(apply(A,2,sum))-1
+Z.k=scale(k)
+```
+
+soft threshold
+```{r}
+powers = c(c(1:10), seq(from =10, to=30, by=1)) #choosing a set of soft-thresholding powers
+sft = pickSoftThreshold(vsdd, powerVector=powers, verbose =5, networkType="signed") #call network topology analysis function
+```
+
+
+scale independence
+```{r}
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2], xlab= "Soft Threshold (power)", ylab="Scale Free Topology Model Fit, signed R^2", type= "n", main= paste("Scale independence"))
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2], labels=powers, col="red")
+abline(h=0.8, col="red")
+
+plot(sft$fitIndices[,1], sft$fitIndices[,5], xlab= "Soft Threshold (power)", ylab="Mean Connectivity", type="n", main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, col="red")
+
+```
+
+################ Construct network ################
+
+```{r}
+
+softPower=20
+
+net = blockwiseModules(vsdd, power = softPower,
+    TOMType = "signed", minModuleSize = 30,
+    reassignThreshold = 0, mergeCutHeight = 0.25,
+    numericLabels = TRUE, pamRespectsDendro = FALSE,
+    saveTOMs = TRUE,
+    saveTOMFileBase = "MimeticGenesTOM",
+    verbose = 3)
+
+
+```
+
+plot these modules
+```{r}
+table(net$colors)
+summary(net)
+
+sizeGrWindow(12,9)
+# Convert labels to colors for plotting
+mergedColors = labels2colors(net$colors)
+# Plot the dendrogram and the module colors underneath
+plotDendroAndColors(net$dendrograms[[1]], mergedColors[net$blockGenes[[1]]],
+    "Module colors",
+    dendroLabels = FALSE, hang = 0.03,
+    addGuide = TRUE, guideHang = 0.05)
+
+#moduleLabels=net$colors
+#moduleColors = labels2colors(net$colors)
+#MEs=net$MEs;
+#geneTree= net$dendrograms[[1]]
+
+```
+
+
+not adams
+```{r}
+
+softPower=20
+adjacency=adjacency(vsdd, power=20, type="signed")
+TOM= TOMsimilarity(adjacency); #, TOMType = "signed")
+dissTOM=1-TOM
+geneTree= hclust(as.dist(dissTOM), method = "average")
+plot(geneTree, xlab="", sub="", main="gene Clustering on TOM-based dissimilarity", labels=FALSE, hang=0.04)
+
+```
+
+################ make modules ################
+```{r}
+minModuleSize=30
+dynamicMods=cutreeDynamic(dendro= geneTree, distM = dissTOM, deepSplit = 2, pamRespectsDendro = FALSE, minClusterSize = minModuleSize)
+table(dynamicMods)
+dynamicColors=labels2colors(dynamicMods)
+
+sizeGrWindow(8,6)
+plotDendroAndColors(geneTree,dynamicColors, "Dynamic Tree Cut", dendroLabels = FALSE, hang=0.03, addGuide = TRUE, guideHang = 0.05, main="Gene dendrogram and module colors")
+```
+
+################ Merge modules whose expression profiles are very similar ################
+```{r}
+MEList=moduleEigengenes(vsdd, colors = dynamicColors)
+MEs= MEList$eigengenes
+
+MEDiss= 1-cor(MEs)
+
+METree=hclust(as.dist(MEDiss), method="average")
+
+sizeGrWindow(7,6)
+plot(METree, main= "Clustering of module eigengenes", xlab="", sub="")
+
+MEDissThres=0.25
+
+abline(h=MEDissThres, col="red")
+
+```
+
+```{r}
+#Call an automatic mergin function
+merge=mergeCloseModules(vsdd, dynamicColors, cutHeight = MEDissThres, verbose = 3)
+#the merged module colors
+mergedColors=merge$colors
+#Eigengenes of the new merged modules:
+mergedMEs=merge$newMEs;
+
+sizeGrWindow(12,9)
+pdf(file="figures/blackvscolor/black.and.color.cluster.dendrogram.pdf", wi=9, he=6)
+plotDendroAndColors(geneTree, cbind(dynamicColors, mergedColors), c("Dynamic Tree Cut", "Merged dynamic"), dendroLabels = FALSE, hang=0.03, addGuide = TRUE, guideHang = 0.05)
+
+dev.off()
+
+#Rename to moduleColors
+moduleColors=mergedColors
+#Construct numerical labels corresponding to the colors
+colorOrder=c("grey", standardColors(50))
+moduleLabels=match(moduleColors, colorOrder)-1
+MEs=mergedMEs
+
+
+```
+
+```{r}
+nGenes=ncol(vsdd);
+nSamples=nrow(vsdd);
+
+MEs0=moduleEigengenes(vsdd, mergedColors)$eigengenes
+MEs = orderMEs(MEs0)
+
+moduleTraitCor = cor(MEs, WGCNAsamples, use = "p");
+moduleTraitPvalue = corPvalueStudent(moduleTraitCor, nSamples);
+
+sizeGrWindow(10,6)
+
+textMatrix= paste(signif(moduleTraitCor, 2), "\n(", 
+                    signif(moduleTraitPvalue, 2), ")", sep= "");
+dim(textMatrix)= dim(moduleTraitCor)
+
+
+par(mar= c(6, 8.5, 3, 3))
+#display the corelation values with a heatmap plot
+labeledHeatmap(Matrix= moduleTraitCor, 
+            xLabels= names(WGCNAsamples), 
+            yLabels= gsub(pattern = "ME",
+replacement = "", names(MEs)), 
+            ySymbols= names(MEs), 
+            colorLabels= FALSE, 
+            colors= blueWhiteRed(50), 
+            textMatrix= textMatrix, 
+            setStdMargins= FALSE, 
+            cex.text= .75, 
+            zlim= c(-1,1), 
+            main= paste("Module-trait relationships"))
+
+# save to disk
+
+png("figures/blackvscolor/power20.blackvscolor.WGCNA_heatmap_new_putative_fix.png", width = 7, height = 12, units = "in", res = 300)
+par(mar= c(6, 12, 3, 3))
+labeledHeatmap(Matrix= moduleTraitCor, 
+            xLabels= names(WGCNAsamples), 
+            yLabels=  gsub(pattern = "ME",
+replacement = "", names(MEs)), 
+            ySymbols= names(MEs), 
+            colorLabels= FALSE, 
+            colors= blueWhiteRed(50), 
+            textMatrix= textMatrix, 
+            setStdMargins= FALSE, 
+            cex.text= 1, 
+            zlim= c(-1,1), 
+            main= paste("Module-trait relationships"))
+
+dev.off()
+
+```
+
+
+```{r}
+
+
+png("figures/blackvscolor/darkred.power20.blackvscolor.WGCNA_heatmap.png", width = 7, height = 4, units = "in", res = 300)
+which.module="darkred"
+datME=MEs
+datExpr=vsdd
+ME=datME[, paste("ME", which.module, sep = "")].
+par(mfrow=c(2,1), mar=c(0.3, 5.5, 3, 2))
+plotMat(t(scale(datExpr[,moduleColors==which.module])),
+         nrgcols=30, rlabels=F, rcols=which.module,
+         main=which.module, cex.main=2)
+par(mar=c(5,4.2,0,0.7))
+barplot(ME, col = which.module, main = "", names.arg = c(row.names(vsdd)), cex.names = 0.5, cex.main=2,
+        ylab="Eigengene expression", xlab="", las=2 )
+dev.off()
+```
+
+```{r}
+png("figures/blackvscolor/tan.power20.blackvscolor.WGCNA_heatmap.png", width = 7, height = 4, units = "in", res = 300)
+which.module="tan"
+datME=MEs
+datExpr=vsdd
+ME=datME[, paste("ME", which.module, sep = "")]
+par(mfrow=c(2,1), mar=c(0.3, 5.5, 3, 2))
+plotMat(t(scale(datExpr[,moduleColors==which.module])),
+         nrgcols=30, rlabels=F, rcols=which.module,
+         main=which.module, cex.main=2)
+par(mar=c(5,4.2,0,0.7))
+barplot(ME, col = which.module, main = "", names.arg = c(row.names(vsdd)), cex.names = 0.5, cex.main=2,
+        ylab="Eigengene expression", xlab="", las=2 )
+dev.off()
+```
+
+```{r}
+png("figures/blackvscolor/black.power20.blackvscolor.WGCNA_heatmap.png", width = 7, height = 4, units = "in", res = 300)
+which.module="black"
+datME=MEs
+datExpr=vsdd
+ME=datME[, paste("ME", which.module, sep = "")]
+par(mfrow=c(2,1), mar=c(0.3, 5.5, 3, 2))
+plotMat(t(scale(datExpr[,moduleColors==which.module])),
+         nrgcols=30, rlabels=F, rcols=which.module,
+         main=which.module, cex.main=2)
+par(mar=c(5,4.2,0,0.7))
+barplot(ME, col = which.module, main = "", names.arg = c(row.names(vsdd)), cex.names = 0.5, cex.main=2,
+        ylab="Eigengene expression", xlab="", las=2 )
+dev.off()
+```
+
+
+
+Get module membership.
+
+```{r WGCNA: output module membership}
+
+datME=moduleEigengenes(vsdd,mergedColors)$eigengenes
+datKME=signedKME(vsdd, datME, outputColumnName="MM.")
+genes=names(vsdd)
+geneInfo0 = data.frame(gene=genes,moduleColor=mergedColors)
+color=data.frame(geneInfo0,datKME) #these are from your original WGCNA analysis 
+head(color)
+write.csv(as.data.frame(color), file = "results/blackvscolor/GeneModule_membership.csv")
+
+#### MM pvalues
+modNames = substring(names(MEs), 3)
+geneModuleMembership = as.data.frame(cor(vsdd, MEs, use = "p"));
+MMPvalue=as.data.frame(corPvalueStudent(as.matrix(geneModuleMembership), nSamples));
+names(geneModuleMembership) = paste("MM", modNames, sep="");
+names(MMPvalue) = paste("p.MM", modNames, sep="");
+pvals=data.frame(geneModuleMembership,MMPvalue)
+head(pvals)
+write.csv(as.data.frame(pvals), file = "results/blackvscolor/GeneModule_membership_pvalues.csv")
+
+```
+
+
+Black_vs_Color significance by module membership.
+
+
+```{R WGCNA: significance of population membership}
+
+whichTrait="Black_vs_Color" #Replace this with the trait of interest
+
+Black_vs_Color = as.data.frame(WGCNAsamples$Black_vs_Color);
+names(Black_vs_Color) = "Black_vs_Color"
+# names (colors) of the modules
+modNames = substring(names(MEs), 3)
+geneModuleMembership = as.data.frame(cor(vsdd, MEs, use = "p"));
+MMPvalue = as.data.frame(corPvalueStudent(as.matrix(geneModuleMembership), nSamples));
+
+names(geneModuleMembership) = paste("MM", modNames, sep="");
+names(MMPvalue) = paste("p.MM", modNames, sep="");
+geneTraitSignificance = as.data.frame(cor(vsdd, Black_vs_Color, use = "p"));
+GSPvalue = as.data.frame(corPvalueStudent(as.matrix(geneTraitSignificance), nSamples));
+names(geneTraitSignificance) = paste("GS.", names(Black_vs_Color), sep="");
+names(GSPvalue) = paste("p.GS.", names(Black_vs_Color), sep="");
+
+```
+
+
+PULL OUT datKME by module of interest, rank them high membership to lowest (from 1 to -1), then run through GO.
+
+For each signifcant module I want to see:
+1. What genes are in these modules.
+2. If there are candidate color genes.
+3. GO of this grouping.
+
+### Significant gene modules by color morph
+
+```{R, WGNCA: identify significant modules by color patch}
+# subets out only significant modules
+modulePs <- as.data.frame(moduleTraitPvalue)
+Black_vs_Colorsigmods <- rownames(subset(modulePs, Black_vs_Color < 0.05))
+print(paste0("Number of significant modules by black_vs_color: ", length(Black_vs_Colorsigmods)))
+morphsigmods <- rownames(subset(modulePs, morph < 0.05))
+print(paste0("Number of significant modules by morph: ", length(morphsigmods)))
+
+```
+
+Get gene information for these.
+
+```{R, WGNCA: gene information for significant modules by Black_vs_Color}
+MMBlack_vs_Colorsigmods <- gsub(pattern = "ME", replacement = "MM.", Black_vs_Colorsigmods)
+
+# loop to make ordered outputs for GOrilla
+for (i in 1:length(MMBlack_vs_Colorsigmods)){
+  modcol <- MMBlack_vs_Colorsigmods[i]
+  # get data for module color
+  tmp <- datKME[,modcol]
+  gene_rows <- rownames(datKME)
+  tmp <- as.data.frame(cbind(gene_rows, as.numeric(tmp)))
+  colnames(tmp) <- c("gene", "module.membership")
+  tmp$module.membership <- as.numeric(as.character(tmp$module.membership))
+  tmp <- tmp[order(tmp[2], decreasing = TRUE), ]
+  write.csv(tmp, paste0("results/blackvscolor/membership.module/Black_vs_Color_", modcol, "ModuleMembership.csv"), row.names = FALSE)
+}
+
+
+```
+
+
+```{R Hub genes}
+
+# subets out only significant modules
+modulePs <- as.data.frame(moduleTraitPvalue)
+black_vs_colorsigmods <- rownames(subset(modulePs, Black_vs_Color < 0.05))
+print(paste0("Number of significant modules by color morph: ", length(morphsigmods)))
+tissuesigmods <- rownames(subset(modulePs, Black_vs_Color < 0.05))
+print(paste0("Number of significant modules by color patch: ", length(Black_vs_Colorsigmods)))
+
+sigmods <- rownames(modulePs[rowSums(modulePs < 0.05) >= 1, ])
+print(paste0("Number of unique significant modules by any variable: ", length(sigmods)))
+
+
+# remove "ME" from all sigmods
+sigmods <- gsub(pattern = "ME", replacement = "", sigmods)
+probes = names(vsdd)
+nTop = 7
+moduleColors=mergedColors
+adj = adjacency(vsdd, power = 20, type = "signed") #specify network type
+
+## Translate adjacency into topological overlap matrix and calculate the corresponding dissimilarity
+
+TOM = TOMsimilarity(adj, TOMType="signed") #Topological Overlap Matrix
+dissTOM = 1-TOM 
+
+for(i in 1:length(unique(sigmods))){
+ #inModule = sigmods[i];
+ #modProbes = probes[inModule];
+ inModule = (moduleColors == sigmods[i]);
+ modProbes = probes[inModule];
+ ## Select the corresponding Topological Overlap
+
+ modTOM = TOM[inModule, inModule];
+ dimnames(modTOM) = list(modProbes, modProbes)
+
+ ## Genes with highest connectivity within each significant module
+
+ IMConn = softConnectivity(vsdd[, modProbes])
+ top = (rank(-IMConn) <= nTop)
+IMConn
+ top
+ 
+ tempdat<-data.frame(IMConn,modProbes)[order(-IMConn),]
+ names(tempdat)<-c("IMConnectivity","target_id")
+ tempdat$ModuleColor <- rep(sigmods[i],nrow(tempdat))
+ #tempdat2 = left_join(tempdat,preGO1, by = "target_id")
+ write.csv(tempdat, paste("results/blackvscolor/hub/blackvscolor.HubGenes",sigmods[i],".csv",sep="_"), na="", row.names=FALSE)
+}
+
+## List all the files
+
+temp <- list.files(path = "results/blackvscolor/hub/", pattern = "*HubGenes")
+temp <- paste("results/blackvscolor/hub/", temp, sep = "")
+Hub_genes = do.call(rbind, lapply(temp, function(x) read.csv(x, stringsAsFactors = FALSE)))
+write.csv(Hub_genes, paste("results/blackvscolor/hub/blackvscolor.HubGenes_all.csv",sep="_"), na="", row.names=FALSE)
+
+```
+
+
+```{R HUBGENES2}
+
+# Recalculate topological overlap if needed
+
+
+# Select modules
+sigmods # Lists modules of interest
+module = "tan"    
+
+
+moduleColors = mergedColors
+# Select module probes
+probes = names(vsdd)
+inModule = is.finite(match(moduleColors, module));
+modProbes = probes[inModule];
+#modGenes = annote_df$gene_name[match(modProbes, annote_df$target_id)];
+
+# Select the corresponding Topological Overlap
+modTOM = TOM[inModule, inModule];
+dimnames(modTOM) = list(modProbes, modProbes)
+cyt = exportNetworkToCytoscape(modTOM,
+      edgeFile = paste("results/cytoscapeinput/blackvscolor/new/CytoscapeInput-edges_tan-", paste(module, collapse="-"), ".txt"),
+      nodeFile = paste("results/cytoscapeinput/blackvscolor/new/CytoscapeInput-nodes_tan-", paste(module, collapse="-"), ".txt"),
+      weighted = TRUE,
+      threshold = 0.235, # Change to get get 50 top genes
+      nodeNames = modProbes,
+      #altNodeNames = modGenes,
+      nodeAttr = moduleColors[inModule]);
+cyt
+
+
+
+cytoscapePing()
+
+```
