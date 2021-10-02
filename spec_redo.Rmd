@@ -1,0 +1,242 @@
+---
+title: "color patch orange vs red redo"
+author: "Andrew O. Rubio"
+date: "7/26/2021"
+output: html_document
+---
+
+
+```{r}
+library(tximport)
+library(DESeq2)
+library(dplyr)
+library(foreach)
+library(data.table)
+library(splines)
+library(ggthemes)
+library(scales)
+library(gridExtra)
+library(tidyr)
+library(pheatmap)
+library(RColorBrewer)
+library(ggplot2)
+library("BiocParallel")
+register(SnowParam(8))
+library(apeglm)
+library(tidyverse)
+library(topGO)
+library(GO.db)
+library(tidyverse)
+```
+
+
+Some functions for this analysis.
+```{r}
+# this function pulls out particular a priori genes of interest into a new data frame
+aprioris <- function(df, annos){
+  df.aprioris <- data.frame()
+  for (i in 1:length(colors$gene_name)){
+    searchterm <- paste0("\\b", colors$gene_name[i], "\\b")
+    searchterm <- tolower(searchterm)
+    tmp <- df %>% filter(str_detect(Gene, searchterm))
+    df.aprioris <- rbind(df.aprioris, tmp)
+}
+   return(df.aprioris)
+}
+# this function extracts all genes below a specified alpha value, prints the number of DE genes to screen, and saves a spreadsheet to file
+siggies <- function(df, alpha, csv){
+  sigs <- df %>% filter(padj < alpha)
+  print(paste0("Number of significant genes: ", length(sigs$padj)))
+  write.csv(sigs, csv, row.names = FALSE)
+  return(sigs)
+}
+# significant gene wrapper function
+SigGeneWrapper <- function(model_output, alpha, comparison){
+  print(paste0("Running ", comparison, " with alpha = ", alpha))
+  df <- setDT(as.data.frame(model_output), keep.rownames = "Gene")
+  # add annotation data
+  #df1 <- dplyr::left_join(df, annos, by = "transcript") 
+  # get significant genes
+  print("Overall significant genes")
+  sigs <- siggies(df, alpha, paste0("results/redoresults", comparison, "_genes.csv"))
+  # add annotation data
+  colordf <- aprioris(df, annos)
+  #get significant color genes
+  print("Significant color genes")
+  color.sigs <- siggies(colordf, alpha, paste0("results/redoresults/", comparison, "_colorgenes.csv"))
+}
+```
+#Data import
+
+```{r}
+sessionInfo()
+```
+
+#Data import
+
+create sample spreadsheet.
+```{r}
+###### list all samples from expression data ####
+# get the directory/path for each sample in this study
+base_dir <- getwd()
+filenames <- list.files(path = "orangevsred/", full.names = F, recursive = F)
+files <- file.path(base_dir, "orangevsred/", filenames) # files = directory + salmon directory + sample name + quantifictaion file name
+names(files) <- "~/Google Drive/Projects/color_patch_trimmed_redo/spec/orangevsred/"
+all(file.exists(files)) # do these all actually exist?
+list(files)
+#### make sample spreadsheet####
+color_samples <- as.data.frame(filenames)
+# get sample
+color_samples$sample <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "Black", replacement = "") %>% gsub(pattern = "Yellow", replacement = "") %>% gsub(pattern = "Varadero", replacement = "") %>% gsub(pattern = "Sauce", replacement = "")  %>% gsub(pattern = "Red", replacement = "")
+# get tussue
+color_samples$tissue <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "[0-9]", replacement = "") %>% gsub(pattern = "Sauce", replacement = "") %>% gsub(pattern = "Varadero", replacement = "")
+color_samples$tissue
+# get morph
+color_samples$morph <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "Black", replacement = "") %>% gsub(pattern = "Yellow", replacement = "") %>% gsub(pattern = "[0-9]", replacement = "") %>% gsub(pattern = "Red", replacement = "") 
+color_samples$morph
+# save as spreadsheet
+color_deseqsamples <- color_samples [,-1]
+list(color_deseqsamples)
+#write.table(color_deseqsamples, "~/Google Drive/Projects/color_patch_trimmed_redo/results/color_deseqsamples.tsv", row.names = TRUE, sep = "\t")
+write.csv(color_deseqsamples, "~/Google Drive/Projects/color_patch_trimmed_redo/spec/results/AHHHHHHHHcolor_samplespreadsheet.csv", row.names = F)
+
+```
+
+# Import expression data from.
+```{r}
+annos <- fread("Ranitomeya_imitator.imitator.1.3.6.annotations.genesymbol.tsv", header = FALSE)
+colnames(annos) <- c("transcript", "Gene")
+annos$Gene <- tolower(annos$Gene)
+# rname columns from annos file
+# import data
+color_countdata <- data.frame(annos$transcript)
+colnames(color_countdata) <- "transcript"
+for (counts in (1:length(filenames))) {
+  # import data for that sample
+  toimport <- filenames[counts]
+tmpdata <- read.table(paste0("orangevsred/", toimport), header = FALSE, sep = "\t")
+  # sample id
+  samplename <- toimport %>% gsub(pattern = ".gene.counts", replacement = "")
+  colnames(tmpdata) <- c("transcript", samplename)
+  color_countdata <- dplyr::left_join(color_countdata, tmpdata, by = "transcript")
+}
+dim(color_countdata)
+color_countdata <- data.frame(color_countdata, row.names = 1)
+head(color_countdata)
+```
+
+# Import a priori candidate color gene
+```{r}
+colors <- read.csv("new_color_genes.csv", header = TRUE)
+colnames(colors) <- "gene_name" 
+colors$gene_name <- tolower(colors$gene_name)
+head(colors)
+```
+
+# Quick data control. Change and "NA" values to "0". Also remove any row with total expression <50 (or 1 count/every 3rd sample).
+```{r}
+# change all NA to 0
+print(paste("Number of NA after import:", sum(is.na(color_countdata))))
+color_countdata[is.na(color_countdata)] <-  0
+print(paste("Number of NA after NA removal:", sum(is.na(color_countdata))))
+# remove any row with total expression < 10
+print(paste("Number of rows (transcripts) after import:", nrow(color_countdata)))
+keep <- rowSums(color_countdata) >= 50
+color_countdata <- color_countdata[keep,]
+print(paste("Number of rows (transcripts) after filter:", nrow(color_countdata)))
+head(color_countdata)
+color_countdata
+#write.csv(color_countdata, "~/Google Drive/Projects/color_patch_trimmed/results/color_count_data.csv", row.names = F)
+
+```
+
+```{r}
+# make rownames column 1
+color_countdata <- setDT(color_countdata, keep.rownames = "transcript")[]
+# add gene symbol
+color_countdata2 <- dplyr::left_join(annos, color_countdata, by = "transcript")
+# change all NA to 0
+print(paste("Number of NA after import:", sum(is.na(color_countdata2))))
+color_countdata2[is.na(color_countdata2)] <-  0
+print(paste("Number of NA after NA removal:", sum(is.na(color_countdata2))))
+# combine all counts that map to the same gene
+color_countdata3 <- aggregate(color_countdata2[, 3:9], list(color_countdata2$Gene), sum)
+color_countdata3[is.na(color_countdata3)] <-  0
+colnames(color_countdata3)[1] <- "Gene"
+color_countdata <- color_countdata3
+color_countdata <- data.frame(color_countdata, row.names = 1)
+# save gene-level count data
+#write.table(color_countdata, "results/color_gene.level.count.data.tsv", row.names = TRUE, sep = "\t")
+```
+
+```{r}
+spec_color_deseqsamples <- read_csv("color_spec_samplespreadsheet.csv")
+```
+#mean brightness
+```{r}
+dds_mean_brightness <- DESeqDataSetFromMatrix (countData = color_countdata,
+                                       colData = spec_color_deseqsamples,
+                                       design = ~ morph + mean_brigthness)
+
+#run Wald test
+dds.mean_brightness <- DESeq(dds_mean_brightness)
+res.mean_brightness <- results(dds.mean_brightness, parallel=TRUE, BPPARAM=SnowParam(8))
+res.mean_brightness$transcript <- mcols(res.mean_brightness)$transcript
+# how many are "significant"?
+table(res.mean_brightness[,"padj"] < 0.05)
+
+#color genes 
+SigGeneWrapper(res.mean_brightness, 0.05, "res.mean_brightness")
+
+```
+
+
+
+#chroma
+```{r}
+dds_chroma <- DESeqDataSetFromMatrix (countData = color_countdata,
+                                       colData = spec_color_deseqsamples,
+                                       design = ~ morph + chroma)
+
+#run Wald test
+dds.chroma <- DESeq(dds_chroma)
+res.chroma <- results(dds.chroma, parallel=TRUE, BPPARAM=SnowParam(8))
+res.chroma$transcript <- mcols(res.chroma)$transcript
+# how many are "significant"?
+table(res.chroma[,"padj"] < 0.05)
+#color genes 
+SigGeneWrapper(res.chroma, 0.05, "res.chroma")
+
+```
+
+#carotenoid chroma
+```{r}
+dds_carotenoid_chroma <- DESeqDataSetFromMatrix (countData = color_countdata,
+                                       colData = spec_color_deseqsamples,
+                                       design = ~ morph + carotenoid_chroma)
+
+#run Wald test
+dds.carotenoid_chroma <- DESeq(dds_carotenoid_chroma)
+res.carotenoid_chroma <- results(dds.carotenoid_chroma, parallel=TRUE, BPPARAM=SnowParam(8))
+res.carotenoid_chroma$transcript <- mcols(res.carotenoid_chroma)$transcript
+# how many are "significant"?
+table(res.carotenoid_chroma[,"padj"] < 0.05)
+#color genes 
+SigGeneWrapper(res.carotenoid_chroma, 0.05, "res.carotenoid_chroma")
+```
+```{r}
+dds_peak_chroma <- DESeqDataSetFromMatrix (countData = color_countdata,
+                                       colData = spec_color_deseqsamples,
+                                       design = ~ morph + peak_chroma)
+
+#run Wald test
+dds.peak_chroma <- DESeq(dds_peak_chroma)
+res.peak_chroma <- results(dds.peak_chroma, parallel=TRUE, BPPARAM=SnowParam(8))
+res.peak_chroma$transcript <- mcols(res.peak_chroma)$transcript
+# how many are "significant"?
+table(res.peak_chroma[,"padj"] < 0.05)
+#color genes 
+SigGeneWrapper(res.peak_chroma, 0.05, "res.peak_chroma")
+
+```
+
