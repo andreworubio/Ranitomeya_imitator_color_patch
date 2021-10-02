@@ -1,0 +1,752 @@
+---
+title: "regression"
+output: html_document
+date: "7/26/2021"
+---
+
+
+#loading data
+
+```{r}
+#data frame
+dat <- read.csv("master_spreadsheet.csv", row.names=1)
+dat
+class(dat)
+str(dat)
+```
+
+#rbp2
+```{r}
+library("lme4")
+
+#mean brightness
+cor(dat$mean_brightness, dat$rbp2)
+plot(dat$mean_brightness ~ dat$rbp2, data = dat)
+
+
+rbp2.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$rbp2, data = dat)
+
+summary(rbp2.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$rbp2)
+
+plot(dat$chroma ~ dat$rbp2, data = dat)
+
+rbp2.chroma.lm <- lm(dat$chroma ~ dat$rbp2, data = dat)
+
+summary(rbp2.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$rbp2)
+
+plot(dat$carotenoid_chroma ~ dat$rbp2, data = dat)
+
+rbp2.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$rbp2, data = dat)
+
+summary(rbp2.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$rbp2)
+
+plot(dat$peak_chroma ~ dat$rbp2, data = dat)
+
+rbp2.peak_chroma.lm <- lm(dat$peak_chroma ~ dat$rbp2, data = dat)
+
+summary(rbp2.peak_chroma.lm)
+
+```
+
+
+#impdh2
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$impdh2)
+
+plot(dat$mean_brightness ~ dat$impdh2, data = dat)
+
+impdh2.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$impdh2, data = dat)
+
+summary(impdh2.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$impdh2)
+
+plot(dat$chroma ~ dat$rbp2, data = dat)
+
+impdh2.chroma.lm <- lm(dat$chroma ~ dat$rbp2, data = dat)
+
+summary(impdh2.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$impdh2)
+
+plot(dat$carotenoid_chroma ~ dat$impdh2, data = dat)
+
+impdh2.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$impdh2, data = dat)
+
+summary(impdh2.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$impdh2)
+
+plot(dat$peak_chroma ~ dat$impdh2, data = dat)
+
+impdh2.peak_chroma.lm <- lm(dat$peak_chroma ~ dat$impdh2, data = dat)
+
+summary(impdh2.peak_chroma.lm)
+```
+
+
+#ttc8
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$ttc8)
+
+plot(dat$mean_brightness ~ dat$ttc8, data = dat)
+
+ttc8.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$ttc8, data = dat)
+
+summary(ttc8.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$ttc8)
+
+plot(dat$chroma ~ dat$ttc8, data = dat)
+
+ttc8.chroma.lm <- lm(dat$chroma ~ dat$ttc8, data = dat)
+
+summary(ttc8.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$ttc8)
+
+plot(dat$carotenoid_chroma ~ dat$ttc8 , data = dat)
+
+ttc8.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$ttc8 , data = dat)
+
+summary(ttc8.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$ttc8)
+
+plot(dat$peak_chroma~dat$ttc8, data = dat)
+
+ttc8.peak_chroma.lm <- lm(dat$peak_chroma~dat$ttc8, data = dat)
+
+summary(ttc8.peak_chroma.lm)
+```
+
+#gchfr
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$gchfr)
+
+plot(dat$mean_brightness ~ dat$gchfr, data = dat)
+
+gchfr.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$gchfr, data = dat)
+
+summary(gchfr.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$gchfr)
+
+plot(dat$chroma ~ dat$gchfr, data = dat)
+
+gchfr.chroma.lm <- lm(dat$chroma ~ dat$gchfr, data = dat)
+
+summary(gchfr.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$gchfr)
+
+plot(dat$carotenoid_chroma ~ dat$gchfr , data = dat)
+
+gchfr.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$gchfr , data = dat)
+
+summary(gchfr.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$gchfr)
+
+plot(dat$peak_chroma~dat$gchfr, data = dat)
+
+gchfr.peak_chroma.lm <- lm(dat$peak_chroma~dat$gchfr, data = dat)
+
+summary(gchfr.peak_chroma.lm)
+```
+
+
+
+#crab2
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$crabp2)
+
+plot(dat$mean_brightness ~ dat$crabp2, data = dat)
+
+crabp2.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$crabp2, data = dat)
+
+summary(crabp2.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$crabp2)
+
+plot(dat$chroma ~ dat$crabp2, data = dat)
+
+crabp2.chroma.lm <- lm(dat$chroma ~ dat$crabp2, data = dat)
+
+summary(crabp2.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$crabp2)
+
+plot(dat$carotenoid_chroma ~ dat$crabp2, data = dat)
+
+crabp2.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$crabp2, data = dat)
+
+summary(crabp2.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$crabp2)
+
+plot(dat$peak_chroma~dat$crabp2, data = dat)
+
+crabp2.peak_chroma.lm <- lm(dat$peak_chroma~dat$crabp2, data = dat)
+
+summary(crabp2.peak_chroma.lm)
+```
+
+
+#recql4
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$recql4)
+
+plot(dat$mean_brightness ~ dat$recql4, data = dat)
+
+recql4.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$recql4, data = dat)
+
+summary(recql4.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$recql4)
+
+plot(dat$chroma ~ dat$recql4, data = dat)
+
+recql4.chroma.lm <- lm(dat$chroma ~ dat$recql4, data = dat)
+
+summary(recql4.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$recql4)
+
+plot(dat$carotenoid_chroma ~ dat$recql4, data = dat)
+
+recql4.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$recql4, data = dat)
+
+summary(recql4.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$recql4)
+
+plot(dat$peak_chroma~dat$recql4, data = dat)
+
+recql4.peak_chroma.lm <- lm(dat$peak_chroma~dat$recql4, data = dat)
+
+summary(recql4.peak_chroma.lm)
+```
+
+#mab21l2
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$mab21l2)
+
+plot(dat$mean_brightness ~ dat$mab21l2, data = dat)
+
+mab21l2.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$mab21l2, data = dat)
+
+summary(mab21l2.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$recql4)
+
+plot(dat$chroma ~ dat$mab21l2, data = dat)
+
+mab21l2.chroma.lm <- lm(dat$chroma ~ dat$mab21l2, data = dat)
+
+summary(mab21l2.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$mab21l2)
+
+plot(dat$carotenoid_chroma ~ dat$mab21l2, data = dat)
+
+mab21l2.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$mab21l2, data = dat)
+
+summary(mab21l2.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$mab21l2)
+
+plot(dat$peak_chroma~dat$mab21l2, data = dat)
+
+mab21l2.peak_chroma.lm <- lm(dat$peak_chroma~dat$mab21l2, data = dat)
+
+summary(mab21l2.peak_chroma.lm)
+```
+
+#nrbp1
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$nrbp1)
+
+plot(dat$mean_brightness ~ dat$nrbp1, data = dat)
+
+nrbp1.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$nrbp1, data = dat)
+
+summary(nrbp1.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$nrbp1)
+
+plot(dat$chroma ~ dat$nrbp1, data = dat)
+
+nrbp1.chroma.lm <- lm(dat$chroma ~ dat$nrbp1, data = dat)
+
+summary(nrbp1.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$nrbp1)
+
+plot(dat$carotenoid_chroma ~ dat$nrbp1, data = dat)
+
+nrbp1.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$nrbp1, data = dat)
+
+summary(nrbp1.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$nrbp1)
+
+plot(dat$peak_chroma~dat$nrbp1, data = dat)
+
+nrbp1.peak_chroma.lm <- lm(dat$peak_chroma~dat$nrbp1, data = dat)
+
+summary(nrbp1.peak_chroma.lm)
+```
+
+#shmt2
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$shmt2)
+
+plot(dat$mean_brightness ~ dat$shmt2, data = dat)
+
+shmt2.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$shmt2, data = dat)
+
+summary(shmt2.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$shmt2)
+
+plot(dat$chroma ~ dat$shmt2, data = dat)
+
+shmt2.chroma.lm <- lm(dat$chroma ~ dat$shmt2, data = dat)
+
+summary(shmt2.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$shmt2)
+
+plot(dat$carotenoid_chroma ~ dat$shmt2, data = dat)
+
+shmt2.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$shmt2, data = dat)
+
+summary(shmt2.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$shmt2)
+
+plot(dat$peak_chroma~dat$shmt2, data = dat)
+
+shmt2.peak_chroma.lm <- lm(dat$peak_chroma~dat$shmt2, data = dat)
+
+summary(shmt2.peak_chroma.lm)
+```
+
+
+#aldh1a1
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$aldh1a1)
+
+plot(dat$mean_brightness ~ dat$aldh1a1, data = dat)
+
+aldh1a1.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$aldh1a1, data = dat)
+
+summary(aldh1a1.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$aldh1a1)
+
+plot(dat$chroma ~ dat$aldh1a1, data = dat)
+
+aldh1a1.chroma.lm <- lm(dat$chroma ~ dat$aldh1a1, data = dat)
+
+summary(aldh1a1.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$aldh1a1)
+
+plot(dat$carotenoid_chroma ~ dat$aldh1a1, data = dat)
+
+aldh1a1.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$aldh1a1, data = dat)
+
+summary(aldh1a1.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$aldh1a1)
+
+plot(dat$peak_chroma~dat$aldh1a1, data = dat)
+
+aldh1a1.peak_chroma.lm <- lm(dat$peak_chroma~dat$aldh1a1, data = dat)
+
+summary(aldh1a1.peak_chroma.lm)
+```
+
+
+#adsl
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$adsl)
+
+plot(dat$mean_brightness ~ dat$adsl, data = dat)
+
+adsl.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$adsl, data = dat)
+
+summary(adsl.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$adsl)
+
+plot(dat$chroma ~ dat$adsl, data = dat)
+
+adsl.chroma.lm <- lm(dat$chroma ~ dat$adsl, data = dat)
+
+summary(adsl.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$adsl)
+
+plot(dat$carotenoid_chroma ~ dat$adsl, data = dat)
+
+adsl.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$adsl, data = dat)
+
+summary(adsl.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$adsl)
+
+plot(dat$peak_chroma~dat$adsl, data = dat)
+
+adsl.peak_chroma.lm <- lm(dat$peak_chroma~dat$adsl, data = dat)
+
+summary(adsl.peak_chroma.lm)
+```
+
+
+
+#ak1
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$ak1)
+
+plot(dat$mean_brightness ~ dat$ak1, data = dat)
+
+ak1.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$ak1, data = dat)
+
+summary(ak1.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$ak1)
+
+plot(dat$chroma ~ dat$ak1, data = dat)
+
+ak1.chroma.lm <- lm(dat$chroma ~ dat$ak1, data = dat)
+
+summary(ak1.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$ak1)
+
+plot(dat$carotenoid_chroma ~ dat$ak1, data = dat)
+
+ak1.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$ak1, data = dat)
+
+summary(ak1.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$ak1)
+
+plot(dat$peak_chroma~dat$ak1, data = dat)
+
+ak1.peak_chroma.lm <- lm(dat$peak_chroma~dat$ak1, data = dat)
+
+summary(ak1.peak_chroma.lm)
+```
+
+
+
+#dock7
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$dock7)
+
+plot(dat$mean_brightness ~ dat$dock7, data = dat)
+
+dock7.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$dock7, data = dat)
+
+summary(dock7.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$dock7)
+
+plot(dat$chroma ~ dat$dock7, data = dat)
+
+dock7.chroma.lm <- lm(dat$chroma ~ dat$dock7, data = dat)
+
+summary(dock7.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$dock7)
+
+plot(dat$carotenoid_chroma ~ dat$dock7, data = dat)
+
+dock7.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$dock7, data = dat)
+
+summary(dock7.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$dock7)
+
+plot(dat$peak_chroma~dat$dock7, data = dat)
+
+dock7.peak_chroma.lm <- lm(dat$peak_chroma~dat$dock7, data = dat)
+
+summary(dock7.peak_chroma.lm)
+```
+
+
+
+#rpia
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$rpia)
+
+plot(dat$mean_brightness ~ dat$rpia, data = dat)
+
+rpia.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$rpia, data = dat)
+
+summary(rpia.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$rpia)
+
+plot(dat$chroma ~ dat$rpia, data = dat)
+
+rpia.chroma.lm <- lm(dat$chroma ~ dat$rpia, data = dat)
+
+summary(rpia.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$rpia)
+
+plot(dat$carotenoid_chroma ~ dat$rpia, data = dat)
+
+rpia.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$rpia, data = dat)
+
+summary(rpia.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$rpia)
+
+plot(dat$peak_chroma~dat$rpia, data = dat)
+
+rpia.peak_chroma.lm <- lm(dat$peak_chroma~dat$rpia, data = dat)
+
+summary(rpia.peak_chroma.lm)
+```
+
+
+#gart
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$gart)
+
+plot(dat$mean_brightness ~ dat$gart, data = dat)
+
+gart.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$gart, data = dat)
+
+summary(gart.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$gart)
+
+plot(dat$chroma ~ dat$gart, data = dat)
+
+gart.chroma.lm <- lm(dat$chroma ~ dat$gart, data = dat)
+
+summary(gart.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$gart)
+
+plot(dat$carotenoid_chroma ~ dat$gart, data = dat)
+
+gart.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$gart, data = dat)
+
+summary(gart.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$gart)
+
+plot(dat$peak_chroma~dat$gart, data = dat)
+
+gart.peak_chroma.lm <- lm(dat$peak_chroma~dat$gart, data = dat)
+
+summary(gart.peak_chroma.lm)
+```
+
+
+#pgm2
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$pgm2)
+
+plot(dat$mean_brightness ~ dat$pgm2, data = dat)
+
+pgm2.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$pgm2, data = dat)
+
+summary(pgm2.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$pgm2)
+
+plot(dat$chroma ~ dat$pgm2, data = dat)
+
+pgm2.chroma.lm <- lm(dat$chroma ~ dat$pgm2, data = dat)
+
+summary(pgm2.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$pgm2)
+
+plot(dat$carotenoid_chroma ~ dat$pgm2, data = dat)
+
+pgm2.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$pgm2, data = dat)
+
+summary(pgm2.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$pgm2)
+
+plot(dat$peak_chroma~dat$pgm2, data = dat)
+
+pgm2.peak_chroma.lm <- lm(dat$peak_chroma~dat$pgm2, data = dat)
+
+summary(pgm2.peak_chroma.lm)
+```
+
+
+
+#anxa1
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$anxa1)
+
+plot(dat$mean_brightness ~ dat$anxa1, data = dat)
+
+anxa1.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$anxa1, data = dat)
+
+summary(anxa1.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$anxa1)
+
+plot(dat$chroma ~ dat$anxa1, data = dat)
+
+anxa1.chroma.lm <- lm(dat$chroma ~ dat$anxa1, data = dat)
+
+summary(anxa1.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$anxa1)
+
+plot(dat$carotenoid_chroma ~ dat$anxa1, data = dat)
+
+anxa1.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$anxa1, data = dat)
+
+summary(anxa1.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$anxa1)
+
+plot(dat$peak_chroma~dat$anxa1, data = dat)
+
+anxa1.peak_chroma.lm <- lm(dat$peak_chroma~dat$anxa1, data = dat)
+
+summary(anxa1.peak_chroma.lm)
+```
+
+
+
+#paics
+```{r}
+#mean brightness
+cor(dat$mean_brightness, dat$paics)
+
+plot(dat$mean_brightness ~ dat$paics, data = dat)
+
+paics.mean_brightness.lm <- lm(dat$mean_brightness ~ dat$paics, data = dat)
+
+summary(paics.mean_brightness.lm)
+
+#chroma
+cor(dat$chroma, dat$paics)
+
+plot(dat$chroma ~ dat$paics, data = dat)
+
+paics.chroma.lm <- lm(dat$chroma ~ dat$paics, data = dat)
+
+summary(paics.chroma.lm)
+
+#carotenoid chroma
+cor(dat$carotenoid_chroma, dat$paics)
+
+plot(dat$carotenoid_chroma ~ dat$paics, data = dat)
+
+paics.carotenoid_chroma.lm <- lm(dat$carotenoid_chroma ~ dat$paics, data = dat)
+
+summary(paics.carotenoid_chroma.lm)
+
+#peak chroma
+cor(dat$peak_chroma, dat$paics)
+
+plot(dat$peak_chroma~dat$paics, data = dat)
+
+paics.peak_chroma.lm <- lm(dat$peak_chroma~dat$paics, data = dat)
+
+summary(paics.peak_chroma.lm)
+```
+
+```{r}
+fuck <- lm( dat$mean_brightness ~ dat$paics + dat$gart + dat$rpia, 
+   data = dat)
+
+AIC(fuck)
+
+summary(fuck)
+```
+
+
+
