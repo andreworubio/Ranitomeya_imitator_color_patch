@@ -1,0 +1,479 @@
+---
+title: "color patch"
+author: "Andrew O. Rubio"
+date: "11/11/2022"
+output: html_document
+---
+
+```{r}
+library(tximport)
+library(DESeq2)
+library(dplyr)
+library(foreach)
+library(data.table)
+library(splines)
+library(ggthemes)
+library(scales)
+library(gridExtra)
+library(tidyr)
+library(pheatmap)
+library(RColorBrewer)
+library(ggplot2)
+library("BiocParallel")
+register(SnowParam(8))
+library(apeglm)
+library(tidyverse)
+library(topGO)
+library(GO.db)
+library(tidyverse)
+library(SummarizedExperiment)
+```
+
+Some functions for this analysis.
+```{r}
+# this function pulls out particular a priori genes of interest into a new data frame
+aprioris <- function(df, annos){
+  df.aprioris <- data.frame()
+  for (i in 1:length(colors$gene_name)){
+    searchterm <- paste0("\\b", colors$gene_name[i], "\\b")
+    searchterm <- tolower(searchterm)
+    tmp <- df %>% filter(str_detect(Gene, searchterm))
+    df.aprioris <- rbind(df.aprioris, tmp)
+}
+   return(df.aprioris)
+}
+
+# this function extracts all genes below a specified alpha value, prints the number of DE genes to screen, and saves a spreadsheet to file
+siggies <- function(df, alpha, csv){
+  sigs <- df %>% filter(padj < alpha)
+  print(paste0("Number of significant genes: ", length(sigs$padj)))
+  write.csv(sigs, csv, row.names = FALSE)
+  return(sigs)
+}
+
+
+# significant gene wrapper function
+SigGeneWrapper <- function(model_output, alpha, comparison){
+  print(paste0("Running ", comparison, " with alpha = ", alpha))
+  df <- setDT(as.data.frame(model_output), keep.rownames = "Gene")
+  # add annotation data
+  #df1 <- dplyr::left_join(df, annos, by = "transcript") 
+  # get significant genes
+  print("Overall significant genes")
+  sigs <- siggies(df, alpha, paste0("results/results/final/", comparison, "_genes.csv"))
+  # add annotation data
+  colordf <- aprioris(df, annos)
+  #get significant color genes
+  print("Significant color genes")
+  color.sigs <- siggies(colordf, alpha, paste0("results/results/final/", comparison, "_colorgenes.csv"))
+}
+
+```
+
+#Data import
+
+```{r}
+#sessionInfo()
+```
+
+```{r}
+###### list all samples from expression data ####
+# get the directory/path for each sample in this study
+base_dir <- getwd()
+
+
+filenames <- list.files(path = "bvsc gene counts/", full.names = F, recursive = F)
+
+files <- file.path(base_dir, "bvsc gene counts/", filenames) # files = directory + salmon directory + sample name + quantifictaion file name
+
+names(files) <- "~/Google Drive/Projects/dissertation/color patch/gene counts/"
+all(file.exists(files)) # do these all actually exist?
+list(files)
+
+#### make sample spreadsheet for black and color####
+
+samples_color <- as.data.frame(filenames)
+
+# get sample
+samples_color$sample <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "Black", replacement = "") %>% gsub(pattern = "One", replacement = "") %>% gsub(pattern = "Varadero", replacement = "") %>% gsub(pattern = "Sauce", replacement = "") %>% gsub(pattern = "Red", replacement = "") %>% gsub(pattern = "Yellow", replacement = "") %>% gsub(pattern = "Two", replacement = "")
+
+# get morph
+samples_color$morph <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "Black", replacement = "") %>% gsub(pattern = "Yellow", replacement = "") %>% gsub(pattern = "[0-9]", replacement = "") %>% gsub(pattern = "Red", replacement = "") %>% gsub(pattern = "One", replacement = "") %>% gsub(pattern = "Two", replacement = "")
+samples_color$morph
+
+# get tissue
+samples_color$tissue <- filenames %>% gsub(pattern = "_", replacement = "") %>% gsub(pattern = ".gene.counts", replacement = "") %>% gsub(pattern = "[0-9]", replacement = "") %>% gsub(pattern = "redo", replacement = "") %>% gsub(pattern = "Sauce", replacement = "") %>% gsub(pattern = "Varadero", replacement = "") %>% gsub(pattern = "Yellow", replacement = "Orange") %>% gsub(pattern = "One", replacement = "") %>% gsub(pattern = "Two", replacement = "")
+
+samples_color$pair.n <- as.factor(rep(c(1:4), 4))
+
+samples_color$pair <- as.factor(rep(c(1:8), 2))
+
+samples_color$color <- c(rep("black",8), rep("colored",8))
+
+deseqsamples_color <- samples_color [,-1]
+
+list(deseqsamples_color)
+
+write.table(deseqsamples_color, "~/Google Drive/Projects/dissertation/color patch/r-output/all_black_vs_color_samples.tsv", row.names = TRUE, sep = "\t")
+```
+
+# Import expression data from.
+```{r}
+annos <- fread("R_imi.UNK.annotations.genesymbol.tsv", header = FALSE)
+colnames(annos) <- c("transcript", "Gene")
+annos$Gene <- tolower(annos$Gene)
+
+# rname columns from annos file
+# import data
+countdata <- data.frame(annos$transcript)
+colnames(countdata) <- "transcript"
+for (counts in (1:length(filenames))) {
+  # import data for that sample
+  toimport <- filenames[counts]
+tmpdata <- read.table(paste0("bvsc gene counts/", toimport), header = FALSE, sep = "\t")
+  # sample id
+  samplename <- toimport %>% gsub(pattern = ".gene.counts", replacement = "")
+  colnames(tmpdata) <- c("transcript", samplename)
+  countdata <- dplyr::left_join(countdata, tmpdata, by = "transcript")
+}
+
+dim(countdata)
+
+write.csv(countdata, "~/Google Drive/Projects/dissertation/color patch/r-output/black_vs_color_count_before_name_data.csv", row.names = F)
+
+
+countdata <- data.frame(countdata, row.names = 1)
+head(countdata)
+head(annos)
+```
+
+# Import a priori candidate color gene
+```{r}
+colors <- read.csv("new_color_genes.csv", header = TRUE)
+colnames(colors) <- "gene_name" 
+colors$gene_name <- tolower(colors$gene_name)
+head(colors)
+```
+
+
+# Quick data control. Change and "NA" values to "0". Also remove any row with total expression <50 (or 1 count/every 3rd sample).
+```{r}
+# change all NA to 0
+print(paste("Number of NA after import:", sum(is.na(countdata))))
+countdata[is.na(countdata)] <-  0
+print(paste("Number of NA after NA removal:", sum(is.na(countdata))))
+
+# remove any row with total expression < 10
+print(paste("Number of rows (transcripts) after import:", nrow(countdata)))
+keep <- rowSums(countdata) >= 50
+countdata <- countdata[keep,]
+print(paste("Number of rows (transcripts) after filter:", nrow(countdata)))
+
+head(countdata)
+countdata
+write.csv(countdata, "~/Google Drive/Projects/dissertation/color patch/r-output/blackvscolor_count_data.csv", row.names = F)
+```
+
+```{r}
+# make rownames column 1
+countdata <- setDT(countdata, keep.rownames = "transcript")[]
+
+# add gene symbol
+countdata2 <- dplyr::left_join(annos, countdata, by = "transcript")
+
+# change all NA to 0
+print(paste("Number of NA after import:", sum(is.na(countdata2))))
+countdata2[is.na(countdata2)] <-  0
+print(paste("Number of NA after NA removal:", sum(is.na(countdata2))))
+
+
+# combine all counts that map to the same gene
+countdata3 <- aggregate(countdata2[, 3:18], list(countdata2$Gene), sum)
+countdata3[is.na(countdata3)] <-  0
+colnames(countdata3)[1] <- "Gene"
+countdata <- countdata3
+
+countdata <- data.frame(countdata, row.names = 1)
+
+# save gene-level count data
+write.table(countdata, "r-output/gene.level.count.data.tsv", row.names = TRUE, sep = "\t")
+```
+
+
+# create a PCA with all data
+```{r}
+dds <- DESeqDataSetFromMatrix (countData = countdata,
+                                       colData = deseqsamples_color,
+                                       design = ~ tissue + morph)
+vsd <- vst(dds)
+
+# get PC1 and PC2 data
+pcaData <- plotPCA(vsd, intgroup = c("tissue", "morph"), returnData = TRUE)
+pcaData
+summary(pcaData)
+
+plotPCA(vsd, intgroup=c("morph", "tissue"))
+
+# get percent variation
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+# pca code
+ggplot(pcaData, aes(x = PC2, y = PC1, color = tissue, shape = morph ))+
+  stat_ellipse(aes(group = morph), type = "t", level = .95, size = .55, show.legend = FALSE) + geom_point(size = 3.5, show.legend = TRUE) + 
+  xlab(paste0("PC2: ", percentVar[2], "% variance")) +
+  ylab(paste0("PC1: ", percentVar[1], "% variance")) +
+  coord_fixed() + theme_bw() + scale_shape_manual(values = c(18:15)) + scale_color_manual(values=c ("BLACK","ORANGE","RED")) + labs(color = "skin color patch")  +  labs(shape = "color morph") 
+
+ggsave("results/figures/figure_1/1pca.png")
+
+```
+
+```{r}
+#PCA for Sauce data
+sauce.skincount <- dplyr::select(countdata, contains("Sauce"))
+sauce.skinmorph <- deseqsamples_color %>% filter(morph == "Sauce")
+
+sauce.significant.color.dds <- DESeqDataSetFromMatrix (countData = sauce.skincount,
+                                       colData = sauce.skinmorph, 
+                                       design = ~ colorpair)
+
+sauce_vsd <- vst(sauce.significant.color.dds)
+
+# get PC1 and PC2 data
+sauce_pcaData <- plotPCA(sauce_vsd, intgroup = c("tissue"), returnData = TRUE)
+sauce_pcaData
+summary(sauce_pcaData)
+
+plotPCA(sauce_vsd, intgroup=c("tissue"))
+
+# get percent variation
+sauce_percentVar <- round(100 * attr(sauce_pcaData, "percentVar"))
+
+
+ggplot(sauce_pcaData, aes(x = PC2, y = PC1, color = tissue))+
+  stat_ellipse(aes(group = tissue), type = "t", level = .95, size = .55, show.legend = FALSE) + geom_point(size = 3.5, show.legend = TRUE) + 
+  xlab(paste0("PC2: ", sauce_percentVar[2], "% variance")) +
+  ylab(paste0("PC1: ", sauce_percentVar[1], "% variance")) +
+  coord_fixed() + theme_bw() + scale_shape_manual(values = c(18:15)) + scale_color_manual(values=c ("BLACK","ORANGE")) + labs(color = "Sauce skin patch")  +  labs(shape = "color morph")   
+ggsave("results/figures/figure_pca_supplmentary/sauce_pca.pdf")
+```
+
+
+```{r}
+#PCA for Varadero data
+varadero.skincount <- dplyr::select(countdata, contains("Varadero"))
+varadero.skinmorph <- deseqsamples_color %>% filter(morph == "Varadero")
+
+varadero.significant.color.dds <- DESeqDataSetFromMatrix (countData = varadero.skincount,
+                                       colData = varadero.skinmorph, 
+                                       design = ~ colorpair)
+
+varadero_vsd <- vst(varadero.significant.color.dds)
+
+# get PC1 and PC2 data
+varadero_pcaData <- plotPCA(varadero_vsd, intgroup = c("tissue"), returnData = TRUE)
+pcaData
+summary(pcaData)
+
+plotPCA(varadero_vsd, intgroup=c("tissue"))
+
+# get percent variation
+varadero_percentVar <- round(100 * attr(varadero_pcaData, "percentVar"))
+
+
+ggplot(varadero_pcaData, aes(x = PC2, y = PC1, color = tissue))+
+  stat_ellipse(aes(group = tissue), type = "t", level = .95, size = .55, show.legend = FALSE) + geom_point(size = 3.5, show.legend = TRUE) + 
+  xlab(paste0("PC2: ", varadero_percentVar[2], "% variance")) +
+  ylab(paste0("PC1: ", varadero_percentVar[1], "% variance")) +
+  coord_fixed() + theme_bw() + scale_shape_manual(values = c(18:15)) + scale_color_manual(values=c ("BLACK","RED")) + labs(color = "Varadero skin patch")  +  labs(shape = "color morph") 
+
+ggsave("results/figures/figure_pca_supplmentary/varadero_pca.pdf")
+
+```
+
+-----------
+Sauce morph
+-----------
+```{r}
+dds_all_sauce <- DESeqDataSetFromMatrix (countData = countdata,
+                                       colData = deseqsamples_color,
+                                       design = ~ morph + morph:pair.n + morph:color)
+
+#run Wald test
+dds.sauce.yellowVSblack <- DESeq(dds_all_sauce)
+resultsNames(dds.sauce.yellowVSblack)
+
+#extract the DEG between orange and black skin patches in the Sauce morph
+res.sauce.yellowVSblack <- results(dds.sauce.yellowVSblack, name = c("morphSauce.colorcolored"))
+res.sauce.yellowVSblack$transcript <- mcols(res.sauce.yellowVSblack)$transcript
+
+# how many are "significant"?
+table(res.sauce.yellowVSblack[,"padj"] < 0.05)
+
+#color genes 
+SigGeneWrapper(res.sauce.yellowVSblack, 0.05, "sauce.orangeVSblack_alpha_0.05")
+
+#sauce heatmaps:melanin, pteridine, and carotenoid
+sauce.skincount <- dplyr::select(countdata, contains("Sauce"))
+sauce.skinmorph <- deseqsamples_color %>% filter(morph == "Sauce")
+
+sauce.significant.color.dds <- DESeqDataSetFromMatrix (countData = sauce.skincount,
+                                       colData = sauce.skinmorph, 
+                                       design = ~ colorpair)
+
+sauce.significant.color.vsd <- varianceStabilizingTransformation(sauce.significant.color.dds, blind=FALSE)
+sauce.significant.color.mat<- assay(sauce.significant.color.vsd)
+
+#melanin
+sauce.melanin<- c("bmpr1a", "erbb3", "kcnj13","mc1r", "mlana", "mlph","mreg", "pmel", "slc24a5", "slc45a2", "sox18","trpm1", "trpm7", "tyrp1")
+
+pheatmap(sauce.significant.color.mat[sauce.melanin,], cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","Black","","","Orange",""),main = "", border_color="Black", color = colorRampPalette(c("grey 60", "white", "black"))(50), angle_col = "0",annotation_legend = F, gaps_col = c(4),fontsize= 25, filename = "results/figures/sauce/final/melanin_sauce_blackvsorange2.png")
+
+#iridophore
+sauce.iridophore<- c("ak1", "gmps","paics","ppat", "rab27a", "prpsap1", "tfec", "impdh1")
+
+pheatmap(sauce.significant.color.mat[sauce.iridophore,], cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","Black","","","Orange",""),main = "", border_color="Black", color = colorRampPalette(c("grey 60","white", "#3182bd"))(50), angle_col = "0",annotation_legend = F, gaps_col = c(4),fontsize= 25, filename = "results/figures/sauce/final/iridophoresandguanine_sauce_blackvsorange2.png")
+
+#carotenoid
+sauce.carotenoid<- c("akr1b1", "dgat2","mab21l2", "scarb2", "xdh", "gch1", "rbp1", "rlbp1", "pax3-a", "pax7")
+
+pheatmap(sauce.significant.color.mat[sauce.carotenoid,], cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","Black","","","Orange",""),main = "", border_color="Black", color = colorRampPalette(c("grey 60","white", "#de2d26"))(50), angle_col = "0",annotation_legend = F, gaps_col = c(4),fontsize= 25, filename = "results/figures/sauce/final/carotenoid_sauce_blackvsorange2.png")
+```
+
+--------------
+Varadero morph
+--------------
+```{r}
+dds_all_varadero <- DESeqDataSetFromMatrix (countData = countdata,
+                                       colData = deseqsamples_color,
+                                       design = ~ morph + morph:pair.n + morph:color)
+
+#run Wald test
+dds.varadero.redVSblack <- DESeq(dds_all_varadero, test="Wald")
+resultsNames(dds.varadero.redVSblack)
+
+#extract the DEG between black and red skin patches in the Varadero morph
+res.varadero.redVSblack <- results(dds.varadero.redVSblack, name = c("morphVaradero.colorcolored"))
+res.varadero.redVSblack$transcript <- mcols(res.varadero.redVSblack)$transcript
+# how many are "significant"?
+table(res.varadero.redVSblack[,"padj"] < 0.05)
+
+#color genes 
+SigGeneWrapper(res.varadero.redVSblack, 0.05, "blackvaradero.redVSblack_alpha_0.05")
+
+#Varadero heatmaps:melanin, pteridine, and carotenoid
+varadero.skincount <- dplyr::select(countdata, contains("Varadero"))
+varadero.skinmorph <- deseqsamples_color %>% filter(morph == "Varadero")
+
+varadero.significant.color.dds <- DESeqDataSetFromMatrix (countData = varadero.skincount,
+                                       colData = varadero.skinmorph, 
+                                       design = ~ colorpair)
+
+varadero.significant.color.vsd <- varianceStabilizingTransformation(varadero.significant.color.dds, blind=FALSE)
+varadero.significant.color.mat<- assay(varadero.significant.color.vsd)
+
+#Melanin
+varadero.melanin<- c("gpr143", "kcnj13", "mc1r", "pax6","pmel", "sox18", "mlana", "mlph", "mitf","slc24a5", "slc45a2", "trpm1", "tyrp1", "wnt7a")
+
+pheatmap(varadero.significant.color.mat[varadero.melanin,], cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","Black","","","Red",""),main = "", border_color="Black", color = colorRampPalette(c("grey 60", "white", "black"))(50), angle_col = "0",annotation_legend = F, gaps_col = c(4),fontsize= 25, filename = "results/figures/varadero/final/melanin_varadero_blackvsorange.png")
+
+#iridophor
+varadero.iridophore<- c("ppat", "pnp", "rab27a", "impdh1")
+
+pheatmap(varadero.significant.color.mat[varadero.iridophore,], cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","Black","","","Red",""),main = "", border_color="Black", color = colorRampPalette(c("grey 60","white", "#3182bd"))(50), angle_col = "0",annotation_legend = F, gaps_col = c(4),fontsize= 25, filename = "results/figures/varadero/final/iridophoresandguanine_varadero_blackvsorange.png")
+
+#Carotenoid
+varadero.carotenoid<- c("pax3-a", "pax7", "akr1b1", "gch1", "xdh", "mab21l2", "rbp1", "rbp2", "rlbp1")
+
+pheatmap(varadero.significant.color.mat[varadero.carotenoid,], cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","Black","","","Red",""),main = "", border_color="Black", color = colorRampPalette(c( "grey 60","white", "firebrick3"))(50), angle_col = "0",annotation_legend = F, gaps_col = c(4),fontsize= 25, filename = "results/figures/varadero/final/carotenoid_varadero_blackvsorange.png")
+```
+
+--------------
+Black vs Color
+--------------
+```{r}
+# create DESeq dataset for black vs color
+dds.all.blackVScolor <- DESeqDataSetFromMatrix (countData = countdata,
+                                       colData = deseqsamples_color, 
+                                       design = ~ color + color:pair.n + morph:color)
+
+#run Wald test
+dds.all.blackVScolor <- DESeq(dds.all.blackVScolor, test="Wald")
+resultsNames(dds.all.blackVScolor)
+
+#extract the DEG between black and orange/red skin patches in the both the Sauce and Varadero morph
+res.all.blackVScolor <- results(dds.all.blackVScolor, name =("color_colored_vs_black"))
+res.all.blackVScolor$transcript <- mcols(res.all.blackVScolor)$transcript
+
+# how many are "significant"?
+table(res.all.blackVScolor[,"padj"] < 0.05)
+
+#color genes 
+SigGeneWrapper(res.all.blackVScolor, 0.05, "reviewerblackVScolor_alpha_0.05")
+
+#black vs color heatmaps: melanin, pteridine, and carotenoid
+bvsc.significant.color.dds <- DESeqDataSetFromMatrix (countData = countdata,
+                                       colData = deseqsamples_color, 
+                                       design = ~ morph + color)
+
+bvsc.significant.color.vsd <- varianceStabilizingTransformation(bvsc.significant.color.dds, blind=FALSE)
+
+bvsc.significant.color.mat<- assay(bvsc.significant.color.vsd)
+
+#all
+bvsc.melanin<- c("kcnj13", "mc1r", "mlana", "pmel", "slc24a5", "tyrp1", "sox18")
+
+pheatmap(bvsc.significant.color.mat[bvsc.melanin,], cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","","All Black","","","","","Orange/Red","",""), border_color="Black", color = colorRampPalette(c("grey 60", "white", "black"))(50), main = "", angle_col = "0",annotation_legend = F, gaps_col = c(8), fontsize= 25, filename = "results/figures/bvsc/final/melanin.png")
+
+#iridophore
+bvsc.iridophores<- c("ak1", "impdh1")
+
+pheatmap(bvsc.significant.color.mat[bvsc.iridophores,], cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","","All Black","","","","","Orange/Red","",""), border_color="Black",color = colorRampPalette(c("grey 60","white", "#3182bd"))(50), main = "",angle_col = "0",annotation_legend = F, gaps_col = c(8), fontsize=25, filename = "results/figures/bvsc/final/iridophore_bvsc_blackvsred.png")
+
+#carotenoid
+bvsc.carotenoid<- c("akr1b1", "gch1", "mab21l2", "rlbp1", "xdh", "pax3-a", "pax7")
+
+pheatmap(bvsc.significant.color.mat[bvsc.carotenoid,], cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","","All Black","","","","","Orange/Red","",""), border_color="Black", color = colorRampPalette(c("grey 60","white", "#de2d26"))(50), angle_col = "0", main = "",annotation_legend = F, gaps_col = c(8), fontsize= 25, filename = "results/figures/bvsc/final/carotenoid_bvsc_blackvsreddd.png")
+```
+
+-------------
+Orange vs red
+-------------
+```{r}
+# create DESeq dataset for black vs color
+dds.orangevsred <- DESeqDataSetFromMatrix (countData = countdata,
+                                       colData = deseqsamples_color, 
+                                       design = ~ morph + morph:pair.n + morph:color)
+
+#run Wald test
+dds.orangevsred <- DESeq(dds.orangevsred, test="Wald")
+resultsNames(dds.orangevsred)
+
+#extract the DEG between orange skin patches from the Varadero morph and red skin patches from the Sauce morph
+res.dds.orangevsred <- results(dds.orangevsred, contrast = list("morphVaradero.colorcolored", "morphSauce.colorcolored"))
+res.dds.orangevsred$transcript <- mcols(res.dds.orangevsred)$transcript
+
+# how many are "significant"?
+table(res.dds.orangevsred[,"padj"] < 0.05)
+
+#color genes 
+SigGeneWrapper(res.dds.orangevsred, 0.05, "orangevsred_alpha_0.05")
+
+#Sauce (orange) vs Varadero (red): melanin, pteridine, and carotenoid
+colored.skincount <- dplyr::select(countdata, contains("two"))
+colored.skinmorph <- deseqsamples_color %>% filter(color == "colored")
+
+ovsr.significant.color.dds <- DESeqDataSetFromMatrix (countData = colored.skincount,
+                                       colData = colored.skinmorph, 
+                                       design = ~ tissue)
+
+ovsr.significant.color.vsd <- varianceStabilizingTransformation(ovsr.significant.color.dds, blind=FALSE)
+
+ovsr.significant.color.mat<- assay(ovsr.significant.color.vsd)
+
+#Full list
+ovsr.DEG<- c("mlana", "pmel", "pax6", "xdh", "tyrp1")
+
+pheatmap(ovsr.significant.color.mat[ovsr.DEG,], cluster_cols = F, cluster_rows = T, scale = "row",labels_col = c("","","Orange","","","","","Red","",""), border_color="Black", color = colorRampPalette(c("grey 60", "white", "#de2d26"))(50), main = "", angle_col = "0",annotation_legend = F, gaps_col = c(4), fontsize= 25, filename = "results/figures/ovsr/final/melanin_ovsr_orangevsred.png")
+```
+
