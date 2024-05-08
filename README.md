@@ -1,1 +1,0 @@
-# Ranitomeya_imitator_color_patch
