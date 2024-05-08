@@ -1,0 +1,205 @@
+#Trimmomatic: trimming reads
+
+B11
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/B11/B11 ~/ar_color_patch/raw_reads/B11/B11_FRRB202335955-1a_H373HDSXY_L2_1.fq.gz ~/ar_color_patch/raw_reads/B11/B11_FRRB202335955-1a_H373HDSXY_L2_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+B15
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/B15/B15 ~/ar_color_patch/raw_reads/B15/B15_FRRB202335956-1a_H35MNDSXY_L4_1.fq.gz ~/ar_color_patch/raw_reads/B15/B15_FRRB202335956-1a_H35MNDSXY_L4_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+B24
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/B24/B24 ~/ar_color_patch/raw_reads/B24/B24_FRRB202335960-1a_H373HDSXY_L2_1.fq.gz ~/ar_color_patch/raw_reads/B24/B24_FRRB202335960-1a_H373HDSXY_L2_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+B25
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/B25/B25 ~/ar_color_patch/raw_reads/B25/B25_FRRB202335957-1a_H37FKDSXY_L3_1.fq.gz ~/ar_color_patch/raw_reads/B25/B25_FRRB202335957-1a_H37FKDSXY_L3_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+B29
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/B29/B29 ~/ar_color_patch/raw_reads/B29/B29_FRRB202335958-1a_H37FKDSXY_L3_1.fq.gz ~/ar_color_patch/raw_reads/B29/B29_FRRB202335958-1a_H37FKDSXY_L3_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+B47
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/B47/B47 ~/ar_color_patch/raw_reads/B47/B47_FRRB202335959-1a_H37FKDSXY_L3_1.fq.gz ~/ar_color_patch/raw_reads/B47/B47_FRRB202335959-1a_H37FKDSXY_L3_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+B61
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/B61/B61 ~/ar_color_patch/raw_reads/B61/B61_FRRB202335961-1a_H37FKDSXY_L3_1.fq.gz ~/ar_color_patch/raw_reads/B61/B61_FRRB202335961-1a_H37FKDSXY_L3_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+B63
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/B63/B63 ~/ar_color_patch/raw_reads/B63/B63_FRRB202335962-1a_H37FKDSXY_L3_1.fq.gz ~/ar_color_patch/raw_reads/B63/B63_FRRB202335962-1a_H37FKDSXY_L3_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+Y11
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/Y11/Y11 ~/ar_color_patch/raw_reads/Y11/Y11_FRRB202335946-1a_H37FKDSXY_L3_1.fq.gz ~/ar_color_patch/raw_reads/Y11/Y11_FRRB202335946-1a_H37FKDSXY_L3_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+Y15
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/Y15/Y15 ~/ar_color_patch/raw_reads/Y15/Y15_FRRB202335947-1a_H37FKDSXY_L3_1.fq.gz ~/ar_color_patch/raw_reads/Y15/Y15_FRRB202335947-1a_H37FKDSXY_L3_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+Y24
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/Y24/Y24 ~/ar_color_patch/raw_reads/Y24/Y24_FRRB202335948-1a_H37FKDSXY_L3_1.fq.gz ~/ar_color_patch/raw_reads/Y24/Y24_FRRB202335948-1a_H37FKDSXY_L3_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+Y25
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/Y25/Y25 ~/ar_color_patch/raw_reads/Y25/Y25_FRRB202335949-1a_H37FKDSXY_L3_1.fq.gz ~/ar_color_patch/raw_reads/Y25/Y25_FRRB202335949-1a_H37FKDSXY_L3_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+Y29
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/Y29/Y29 ~/ar_color_patch/raw_reads/Y29/Y29_FRRB202335950-1a_H35MNDSXY_L4_1.fq.gz ~/ar_color_patch/raw_reads/Y29/Y29_FRRB202335950-1a_H35MNDSXY_L4_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+Y47
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/Y47/Y47 ~/ar_color_patch/raw_reads/Y47/Y47_FRRB202335951-1a_H373HDSXY_L2_1.fq.gz ~/ar_color_patch/raw_reads/Y47/Y47_FRRB202335951-1a_H373HDSXY_L2_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+Y56
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/Y56/Y56 ~/ar_color_patch/raw_reads/Y56/Y56_FRBL202335952-1a_H35MNDSXY_L1_1.fq.gz ~/ar_color_patch/raw_reads/Y56/Y56_FRBL202335952-1a_H35MNDSXY_L1_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+Y61
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/Y61/Y61 ~/ar_color_patch/raw_reads/Y61/Y61_FRRB202335953-1a_H37FKDSXY_L3_1.fq.gz ~/ar_color_patch/raw_reads/Y61/Y61_FRRB202335953-1a_H37FKDSXY_L3_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+Y63
+trimmomatic PE -threads 24 -baseout ~/ar_color_patch/trimmed_reads/Y63/Y63 ~/ar_color_patch/raw_reads/Y63/Y63_FRRB202335954-1a_H37FKDSXY_L3_1.fq.gz ~/ar_color_patch/raw_reads/Y63/Y63_FRRB202335954-1a_H37FKDSXY_L3_2.fq.gz LEADING:3 TRAILING:3 ILLUMINACLIP:barcodes.fa:2:30:10 MINLEN:25
+
+#Index genome
+
+./STAR --runMode genomeGenerate --genomeDir ~/ar_color_patch/STAR_index --genomeFastaFiles ~/genome/R_imi_1.0.fa --runThreadN 24 --limitGenomeGenerateRAM 70744733397 --sjdbOverhang 149 --genomeChrBinNbits 18 --sjdbGTFfile ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 --sjdbGTFtagExonParentTranscript Parent
+
+#STAR: Map reads
+
+B11
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/B11/B11_1P ~/ar_color_patch/trimmed_reads/B11/B11_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/B11/B11 --outSAMtype BAM Unsorted SortedByCoordinate
+
+B15
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/B15/B15_1P ~/ar_color_patch/trimmed_reads/B15/B15_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/B15/B15 --outSAMtype BAM Unsorted SortedByCoordinate
+
+B24
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/B24/B24_1P ~/ar_color_patch/trimmed_reads/B24/B24_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/B24/B24 --outSAMtype BAM Unsorted SortedByCoordinate
+
+B25
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/B25/B25_1P ~/ar_color_patch/trimmed_reads/B25/B25_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/B25/B25 --outSAMtype BAM Unsorted SortedByCoordinate
+
+B29
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/B29/B29_1P ~/ar_color_patch/trimmed_reads/B29/B29_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/B29/B29 --outSAMtype BAM Unsorted SortedByCoordinate
+
+B47
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/B47/B47_1P ~/ar_color_patch/trimmed_reads/B47/B47_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/B47/B47 --outSAMtype BAM Unsorted SortedByCoordinate
+
+B61
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/B61/B61_1P ~/ar_color_patch/trimmed_reads/B61/B61_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/B61/B61 --outSAMtype BAM Unsorted SortedByCoordinate
+
+B63
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/B63/B63_1P ~/ar_color_patch/trimmed_reads/B63/B63_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/B63/B63 --outSAMtype BAM Unsorted SortedByCoordinate
+
+Y11
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/Y11/Y11_1P ~/ar_color_patch/trimmed_reads/Y11/Y11_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/Y11/Y11 --outSAMtype BAM Unsorted SortedByCoordinate
+
+Y15
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/Y15/Y15_1P ~/ar_color_patch/trimmed_reads/Y15/Y15_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/Y15/Y15 --outSAMtype BAM Unsorted SortedByCoordinate
+
+Y24
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/Y24/Y24_1P ~/ar_color_patch/trimmed_reads/Y24/Y24_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/Y24/Y24 --outSAMtype BAM Unsorted SortedByCoordinate
+
+Y25
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/Y25/Y25_1P ~/ar_color_patch/trimmed_reads/Y25/Y25_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/Y25/Y25 --outSAMtype BAM Unsorted SortedByCoordinate
+
+Y29
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/Y29/Y29_1P ~/ar_color_patch/trimmed_reads/Y29/Y29_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/Y29/Y29 --outSAMtype BAM Unsorted SortedByCoordinate
+
+Y47
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/Y47/Y47_1P ~/ar_color_patch/trimmed_reads/Y47/Y47_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/Y47/Y47 --outSAMtype BAM Unsorted SortedByCoordinate
+
+Y61
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/Y61/Y61_1P ~/ar_color_patch/trimmed_reads/Y61/Y61_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/Y61/Y61 --outSAMtype BAM Unsorted SortedByCoordinate
+
+Y63
+./STAR --runMode alignReads --genomeDir ~/ar_color_patch/STAR_index --readFilesIn ~/ar_color_patch/trimmed_reads/Y63/Y63_1P ~/ar_color_patch/trimmed_reads/Y63/Y63_2P --runThreadN 16 --outFilterMultimapNmax 20 --outFilterMismatchNmax 10 --quantMode GeneCounts --outFileNamePrefix ~/ar_color_patch/STAR_mapped/Y63/Y63 --outSAMtype BAM Unsorted SortedByCoordinate
+
+#samtools index & HTSeq count: Count reads using the sorted bam files output from STAR htseq-count for each samples
+
+B11
+
+samtools index B11Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/B11/B11Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/B11/B11.gene.counts
+
+B15
+
+samtools index B15Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/B15/B15Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/B15/B15.gene.counts
+
+B24
+
+samtools index B24Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/B24/B24Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/B24/B24.gene.counts
+
+B25
+
+samtools index B25Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/B25/B25Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/B25/B25.gene.counts
+
+B29
+
+samtools index B29Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/B29/B29Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/B29/B29.gene.counts
+
+
+B47
+
+samtools index B47Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/B47/B47Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/B47/B47.gene.counts
+
+B61
+
+samtools index B61Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/B61/B61Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/B61/B61.gene.counts
+
+B63
+
+samtools index B63Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/B63/B63Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/B63/B63.gene.counts
+
+Y11
+
+samtools index Y11Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/Y11/Y11Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/Y11/Y11.gene.counts
+
+Y15
+
+samtools index Y15Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/Y15/Y15Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/Y15/Y15.gene.counts
+
+Y24
+
+samtools index Y24Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/Y24/Y24Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/Y24/Y24.gene.counts
+
+Y25
+
+samtools index Y25Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/Y25/Y25Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/Y25/Y25.gene.counts
+
+Y29
+
+samtools index Y29Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/Y29/Y29Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/Y29/Y29.gene.counts
+
+Y47
+
+samtools index Y47Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/Y47/Y47Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/Y47/Y47.gene.counts
+
+Y61
+
+samtools index Y61Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/Y61/Y61Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/Y61/Y61.gene.counts
+
+Y63
+
+samtools index Y63Aligned.sortedByCoord.out.bam
+
+htseq-count -s no -f bam -r pos -t exon -i Parent ~/ar_color_patch/STAR_mapped/Y63/Y63Aligned.sortedByCoord.out.bam ~/genome/R_imi.UNK.AED_0.7.functional.merged.gff3 > ~/ar_color_patch/counts/Y63/Y63.gene.counts
